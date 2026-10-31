@@ -19,5 +19,8 @@ export const onRequestGet = guard(async ({ request, env }) => {
     ? sub.expiresAt
     : null;
 
-  return json({ user: publicUser(user), subExpiresAt: expiresAt });
+  return json({
+    user: { ...publicUser(user), isAdmin: user.admin === true },
+    subExpiresAt: expiresAt,
+  });
 });

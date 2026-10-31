@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>后台管理 · Carton Mark</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="stylesheet" href="../assets/css/main.css" />
+    <style>
+      body { background: var(--bg, #f6f8fb); }
+      .admin-wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 64px; }
+      .admin-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+      .admin-head h1 { font-size: 20px; margin: 0; }
+      .admin-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+      .admin-bar input { height: 34px; padding: 0 10px; border: 1px solid var(--line-2, #d8e0ea); border-radius: 8px; width: 240px; }
+      .admin-status { font-size: 13px; color: var(--muted, #64748b); min-height: 20px; margin-bottom: 10px; }
+      .admin-status.is-error { color: #b91c1c; }
+      table.admin-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+      .admin-table th, .admin-table td { text-align: left; padding: 10px 12px; font-size: 13.5px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+      .admin-table th { background: #f8fafc; font-weight: 600; color: #334155; white-space: nowrap; }
+      .admin-table tr:last-child td { border-bottom: none; }
+      .admin-table .row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .admin-table .btn { padding: 4px 8px; font-size: 12.5px; }
+      .tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 12px; background: #eef2f7; color: #475569; }
+      .tag--ok { background: #dcfce7; color: #166534; }
+      .tag--danger { background: #fee2e2; color: #b91c1c; }
+      .empty { padding: 24px; text-align: center; color: var(--muted, #64748b); font-size: 13.5px; }
+    </style>
+  </head>
+  <body>
+    <div class="admin-wrap">
+      <div class="admin-head">
+        <h1>后台管理 · 用户</h1>
+        <div>
+          <span id="who" class="tag">检查登录态…</span>
+          <a class="btn btn-ghost" href="/">返回工作台</a>
+        </div>
+      </div>
+
+      <div class="admin-bar">
+        <input id="q" type="search" placeholder="按邮箱片段搜索" autocomplete="off" />
+        <button type="button" class="btn" id="searchBtn">搜索</button>
+        <button type="button" class="btn btn-ghost" id="resetBtn">清空</button>
+        <button type="button" class="btn btn-ghost" id="refreshBtn">刷新</button>
+      </div>
+
+      <div class="admin-status" id="status"></div>
+
+      <div id="tableHost"></div>
+
+      <div class="admin-bar" style="margin-top: 14px">
+        <button type="button" class="btn" id="moreBtn" hidden>载入更多</button>
+      </div>
+    </div>
+    <script type="module" src="../assets/js/admin.js"></script>
+  </body>
+</html>

@@ -275,6 +275,9 @@ function onAccountChanged(acc) {
     dom.templatesBtn.classList.toggle('is-locked', !acc.subscribed);
     dom.templatesBtn.textContent = acc.subscribed ? '模板' : '模板 🔒';
   }
+  // 后台入口只对管理员可见
+  const adminEntry = document.getElementById('adminEntry');
+  if (adminEntry) adminEntry.hidden = !(acc.user && acc.user.isAdmin);
   buildShapeSelect();
   // 深链里带的订阅专属箱型，等 /api/me 真正返回后再切（首帧 notify 先跳过）
   if (accountReady && pendingShape) {

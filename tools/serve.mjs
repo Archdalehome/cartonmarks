@@ -30,7 +30,57 @@ const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
   let filePath = path.join(ROOT, urlPath);
 
-  // 本地自测用假账号：CM_MOCK_SUB=1 时 /api/me 直接返回已订阅用户（不参与线上部署）
+  // 本地自测用假后台数据（CM_MOCK_SUB=1 时生效，不参与线上部署）
+  if (process.env.CM_MOCK_SUB === '1' && urlPath.startsWith('/api/admin/')) {
+    const send = (status, body) => {
+      res.writeHead(status, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end(body === null ? '' : JSON.stringify(body));
+    };
+    if (urlPath === '/api/admin/users' && req.method === 'GET') {
+      send(200, {
+        items: [
+          {
+            id: 'u_mock_admin',
+            email: 'admin@support.qafield.com',
+            createdAt: '2026-10-01T00:00:00.000Z',
+            subExpiresAt: '2027-10-31T00:00:00.000Z',
+            isAdmin: true,
+          },
+          {
+            id: 'u_mock_alice',
+            email: 'alice@example.com',
+            createdAt: '2026-10-20T09:12:00.000Z',
+            subExpiresAt: null,
+            isAdmin: false,
+          },
+          {
+            id: 'u_mock_bob',
+            email: 'bob@example.com',
+            createdAt: '2026-10-28T15:40:00.000Z',
+            subExpiresAt: '2026-11-25T00:00:00.000Z',
+            isAdmin: false,
+          },
+        ],
+        nextCursor: null,
+      });
+      return;
+    }
+    if (urlPath.endsWith('/sub') && req.method === 'POST') {
+      send(200, { id: 'u_mock_alice', email: 'alice@example.com', subExpiresAt: new Date(Date.now() + 30 * 86400e3).toISOString(), changedDays: 30 });
+      return;
+    }
+    if (req.method === 'DELETE') {
+      res.writeHead(204, { 'Cache-Control': 'no-store' });
+      res.end();
+      return;
+    }
+    send(404, { error: 'not_found', message: 'mock: 未实现的接口' });
+    return;
+  }
+
   if (process.env.CM_MOCK_SUB === '1' && urlPath === '/api/me') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
