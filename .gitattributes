@@ -1,0 +1,7 @@
+# 统一使用 LF，避免 Windows 上出现整文件换行差异
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.pdf binary

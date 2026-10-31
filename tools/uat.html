@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Carton Mark M1 · 浏览器内自检</title>
+<style>
+  body { font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif; margin: 0; padding: 16px 20px; color: #0f172a; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  ol { padding-left: 22px; margin: 0 0 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  .pass::after { content: " ✓"; color: #15803d; }
+  .fail::after { content: " ✗"; color: #c0392b; font-weight: 700; }
+  .fail { color: #c0392b; }
+  #summary { font-weight: 700; margin: 10px 0; }
+  iframe { border: 1px solid #cbd5e1; border-radius: 8px; margin-top: 10px; width: 1180px; height: 760px; }
+</style>
+</head>
+<body>
+<h1>Carton Mark M1 · 浏览器内自检（同源 iframe 真点击）</h1>
+<ol id="out"></ol>
+<div id="summary">运行中…</div>
+<iframe id="frame"></iframe>
+<iframe id="mob" style="width: 380px; height: 640px; margin-top: 8px;"></iframe>
+
+<script type="module">
+const out = document.getElementById('out');
+const summary = document.getElementById('summary');
+const frame = document.getElementById('frame');
+
+let pass = 0;
+let fail = 0;
+
+function check(name, ok, detail = '') {
+  const li = document.createElement('li');
+  li.className = ok ? 'pass' : 'fail';
+  li.textContent = ok ? name : `${name}${detail ? ' — ' + detail : ''}`;
+  out.appendChild(li);
+  ok ? pass++ : fail++;
+  return ok;
+}
+
+const loaded = new Promise((resolve) => {
+  frame.addEventListener('load', resolve, { once: true });
+  frame.src = '/index.html';
+});
+await loaded;
+
+const win = frame.contentWindow;
+const doc = frame.contentDocument;
+const $ = (s) => doc.querySelector(s);
+const $$ = (s) => Array.from(doc.querySelectorAll(s));
+const fire = (el, type) => el.dispatchEvent(new win.Event(type, { bubbles: true }));
+const click = (el) => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+const val = (id) => doc.getElementById(id).value;
+
+// 重新载入页面状态：确保从示例尺寸开始
+if (val('dimL') !== '600' || val('dimW') !== '400' || val('dimH') !== '300') {
+  click(doc.getElementById('resetBtn'));
+}
+
+check('页面脚本无异常，window.__CM__ 可用', Boolean(win.__CM__ && win.__CM__.getNet));
+check('几何结果 = 2000 × 700 mm', (() => {
+  const n = win.__CM__.getNet();
+  return n && n.width === 2000 && n.height === 700;
+})());
+
+const panels = $$('.panel');
+check('展开图有 8 个可点击面板', panels.length === 8, `实际 ${panels.length}`);
+
+const labels = $$('.panel-label').map((n) => n.textContent);
+const want = ['前箱唛', '右侧箱唛', '后箱唛', '左侧箱唛', '前顶箱唛', '后顶箱唛', '前底箱唛', '后底箱唛'];
+check('8 个中文标签齐全', want.every((w) => labels.includes(w)), labels.join(' / '));
+
+const sizes = $$('.panel-size').map((n) => n.textContent);
+check('面板尺寸标注：600×300 / 400×300 / 600×200',
+  sizes.includes('600 × 300') && sizes.includes('400 × 300') && sizes.includes('600 × 200'),
+  sizes.join(' / '));
+
+const dimTexts = $$('.dim-text').map((n) => n.textContent);
+check('尺寸线标注 2,000 / 700 / L 600 / W 400 / H 300',
+  ['2,000 mm', '700 mm', 'L 600', 'W 400', 'H 300'].every((t) => dimTexts.includes(t)),
+  dimTexts.join(' / '));
+
+const front = $('.panel[data-panel="front"]');
+click(front);
+check('点击前面板后高亮', front.classList.contains('is-selected'));
+check('状态栏显示已选面板与尺寸',
+  $('#selInfo').textContent.includes('前箱唛') && $('#selInfo').textContent.includes('600 × 300'),
+  $('#selInfo').textContent);
+
+const other = $('.panel[data-panel="topBack"]');
+click(other);
+check('改选后只保留一个高亮',
+  other.classList.contains('is-selected') && !front.classList.contains('is-selected'));
+
+click(other);
+check('再点一次取消选择', !other.classList.contains('is-selected'));
+
+// 非法输入
+const dimL = doc.getElementById('dimL');
+dimL.value = '0';
+fire(dimL, 'input');
+check('输入 0 时给出错误提示', $('#errL').textContent.trim().length > 0, $('#errL').textContent);
+check('非法输入时图纸保留上一次有效结果', $$('.panel').length === 8);
+
+dimL.value = '';
+fire(dimL, 'input');
+check('清空输入时提示"请输入"', $('#errL').textContent.includes('请输入'), $('#errL').textContent);
+
+dimL.value = '9999';
+fire(dimL, 'input');
+check('超大尺寸被拒绝', $('#errL').textContent.includes('不能大于'), $('#errL').textContent);
+
+dimL.value = '600';
+fire(dimL, 'input');
+check('恢复正常尺寸后错误提示消失', $('#errL').textContent.trim() === '');
+
+// 单位切换
+click(doc.querySelector('[data-unit="cm"]'));
+check('切到厘米后输入框显示 60 / 40 / 30',
+  val('dimL') === '60' && val('dimW') === '40' && val('dimH') === '30',
+  `${val('dimL')}/${val('dimW')}/${val('dimH')}`);
+check('切单位不改图纸，仍为 2,000 × 700',
+  $('#netSize').textContent.includes('2,000 × 700'), $('#netSize').textContent);
+
+// 改尺寸重绘（cm 下 W=50 → 500 mm）
+const dimW = doc.getElementById('dimW');
+dimW.value = '50';
+fire(dimW, 'input');
+check('W 改 500 mm 后展开尺寸变为 2,200 × 800',
+  $('#netSize').textContent.includes('2,200 × 800'), $('#netSize').textContent);
+check('尺寸变化后仍是 8 个面板', $$('.panel').length === 8);
+
+// 恢复示例
+click(doc.getElementById('resetBtn'));
+check('恢复示例尺寸后回到 2,000 × 700',
+  $('#netSize').textContent.includes('2,000 × 700') && val('dimL') === '60',
+  $('#netSize').textContent);
+
+// 使用说明
+click(doc.getElementById('helpBtn'));
+check('使用说明弹层可打开', doc.getElementById('helpDialog').open === true);
+doc.getElementById('helpDialog').close();
+check('使用说明弹层可关闭', doc.getElementById('helpDialog').open === false);
+
+// 等轴测
+const iso = $('#isoHost svg');
+check('等轴测 SVG 已绘制，含 12 条棱线',
+  Boolean(iso) && iso.querySelectorAll('.iso-edge').length === 12,
+  iso ? String(iso.querySelectorAll('.iso-edge').length) : 'no svg');
+check('等轴测有 3 条隐藏背棱（虚线）', iso.querySelectorAll('.iso-edge.is-hidden').length === 3);
+
+// ── 窄屏（380px）回归 ─────────────────────────────
+frame.style.display = 'none';
+
+const mob = document.getElementById('mob');
+await new Promise((resolve) => {
+  mob.addEventListener('load', resolve, { once: true });
+  mob.src = '/index.html';
+});
+
+const mwin = mob.contentWindow;
+const mdoc = mob.contentDocument;
+const m$ = (s) => mdoc.querySelector(s);
+const m$$ = (s) => Array.from(mdoc.querySelectorAll(s));
+
+const scrollW = mdoc.documentElement.scrollWidth;
+const innerW = mwin.innerWidth;
+check(`窄屏无横向溢出（scrollWidth ${scrollW} ≤ innerWidth ${innerW}）`, scrollW <= innerW + 1);
+
+const netSvg = m$('#netHost svg');
+const netCard = m$('#netHost').closest('.card').getBoundingClientRect();
+check(`窄屏展开图 SVG 不超出卡片（svg ${Math.round(Number(netSvg.getAttribute('width')))} / 卡片 ${Math.round(netCard.width)}）`,
+  Number(netSvg.getAttribute('width')) <= netCard.width + 1);
+
+check('窄屏下面板数仍为 8', m$$('.panel').length === 8);
+check('窄屏下图例与说明文字不被裁出视口', (() => {
+  const bar = m$('.statusbar').getBoundingClientRect();
+  const foot = m$('.footnote').getBoundingClientRect();
+  return bar.right <= innerW + 1 && foot.right <= innerW + 1;
+})());
+
+summary.textContent = fail === 0
+  ? `全部通过：${pass} 项`
+  : `失败 ${fail} 项 / 共 ${pass + fail} 项`;
+summary.className = fail === 0 ? 'pass' : 'fail';
+document.title = fail === 0 ? 'UAT PASS' : 'UAT FAIL';
+</script>
+</body>
+</html>

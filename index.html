@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，8 个可编辑面，导出 1:1 PDF。">
+  <title>箱唛设计工具 · Carton Mark</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Cpath d='M8 11.5l8-4 8 4v9l-8 4-8-4z' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M8 11.5l8 4 8-4M16 15.5v9' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon" aria-hidden="true">
+      <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#1f6feb"/><path d="M8 11.5l8-4 8 4v9l-8 4-8-4z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 11.5l8 4 8-4M16 15.5v9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    </span>
+    <div class="brand-text">
+      <h1>箱唛设计工具</h1>
+      <p>Carton Mark · 纸箱展开图箱唛编辑与 PDF 导出</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span class="tag" id="stageTag">M1 · 图纸预览</span>
+    <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>
+  </div>
+</header>
+
+<section class="controls" aria-label="箱型与尺寸设置">
+  <div class="field">
+    <label class="label" for="shapeSelect">箱型</label>
+    <select id="shapeSelect" class="select"></select>
+  </div>
+
+  <span class="divider" aria-hidden="true"></span>
+
+  <div class="field">
+    <span class="label">单位</span>
+    <div class="segmented" id="unitToggle" role="group" aria-label="单位切换">
+      <button type="button" data-unit="mm" class="is-active" aria-pressed="true">毫米 mm</button>
+      <button type="button" data-unit="cm" aria-pressed="false">厘米 cm</button>
+    </div>
+  </div>
+
+  <span class="divider" aria-hidden="true"></span>
+
+  <div class="field field--dim">
+    <label class="label" for="dimL">长 L</label>
+    <div class="input-wrap">
+      <input id="dimL" name="L" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+    <span class="field-error" id="errL" role="alert"></span>
+  </div>
+
+  <div class="field field--dim">
+    <label class="label" for="dimW">宽 W</label>
+    <div class="input-wrap">
+      <input id="dimW" name="W" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+    <span class="field-error" id="errW" role="alert"></span>
+  </div>
+
+  <div class="field field--dim">
+    <label class="label" for="dimH">高 H</label>
+    <div class="input-wrap">
+      <input id="dimH" name="H" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+    <span class="field-error" id="errH" role="alert"></span>
+  </div>
+
+  <div class="field field--actions">
+    <button type="button" class="btn" id="resetBtn">恢复示例尺寸</button>
+  </div>
+</section>
+
+<div class="notice" id="notice" hidden></div>
+
+<main class="workspace">
+  <section class="card">
+    <div class="card-head">
+      <h2>等轴测轮廓</h2>
+      <span class="card-meta" id="isoMeta">—</span>
+    </div>
+    <div class="canvas" id="isoHost" aria-label="纸箱等轴测轮廓图"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>展开图 · 8 个可编辑面</h2>
+      <span class="card-meta" id="netMeta">—</span>
+    </div>
+    <div class="canvas canvas--net" id="netHost" aria-label="RSC 开槽箱展开图，点击面板可选中"></div>
+    <div class="statusbar">
+      <span id="netSize">—</span>
+      <span class="dot" aria-hidden="true"></span>
+      <span id="selInfo">未选择面板</span>
+    </div>
+  </section>
+</main>
+
+<footer class="footnote">
+  虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)，摇盖高度 = W ÷ 2；内部一律按真实毫米计算，图上按容器宽度等比缩放。
+</footer>
+
+<dialog id="helpDialog" class="help-dialog">
+  <form method="dialog" class="help-inner">
+    <div class="help-head">
+      <h2>使用说明</h2>
+      <button class="btn btn-ghost btn-icon" value="close" aria-label="关闭">✕</button>
+    </div>
+    <div class="help-body">
+      <ol>
+        <li><b>选箱型与输尺寸</b>：当前只支持「矩形箱 / RSC 开槽箱」，L 为长、W 为宽、H 为高，单位可切毫米或厘米。</li>
+        <li><b>看两张图</b>：左侧等轴测轮廓看立体比例，右侧展开图看刀模布局，尺寸线随输入实时变化。</li>
+        <li><b>点面板</b>：展开图上 8 个面（前 / 右侧 / 后 / 左侧 / 前顶 / 后顶 / 前底 / 后底）均可点击高亮。</li>
+        <li><b>下一步</b>：面板内的文字、图片编辑在 M2 开放，PDF 导出在 M3 开放。</li>
+      </ol>
+      <p class="help-note">尺寸以毫米为准：600 × 400 × 300 的箱子，展开图为 2000 × 700 mm，前面板 600 × 300、侧面 400 × 300、摇盖 600 × 200。</p>
+      <p class="help-note">输入非法尺寸时会保留上一次有效图纸并给出提示；草稿自动保存在本机浏览器。</p>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
