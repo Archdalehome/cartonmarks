@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，8 个可编辑面（4 箱身面 + 4 主摇盖），1:1 导出 PDF，支持 A3/A4 拼版。">
+  <meta name="description" content="箱唛设计工具 Carton Mark：矩形箱 / L 形箱 / 斜形箱展开图在线设计，文字、图片、横竖线条箱唛编辑，1:1 导出 PDF，支持 A3/A4 拼版。">
   <meta name="theme-color" content="#1f6feb">
   <meta property="og:title" content="箱唛设计工具 · Carton Mark">
-  <meta property="og:description" content="RSC 开槽箱展开图在线设计，文字/图片箱唛编辑，1:1 导出 PDF。">
+  <meta property="og:description" content="矩形箱 / L 形箱 / 斜形箱展开图在线设计，箱唛编辑，1:1 导出 PDF。">
   <meta property="og:type" content="website">
   <title>箱唛设计工具 · Carton Mark</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Cpath d='M8 11.5l8-4 8 4v9l-8 4-8-4z' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M8 11.5l8 4 8-4M16 15.5v9' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -149,10 +149,10 @@
 
   <section class="card">
     <div class="card-head">
-      <h2 id="netTitle">展开图 · 12 个区域 / 8 个可编辑面</h2>
+      <h2 id="netTitle">展开图</h2>
       <span class="card-meta" id="netMeta">—</span>
     </div>
-    <div class="canvas canvas--net" id="netHost" aria-label="RSC 开槽箱展开图，点击可编辑面进入编辑"></div>
+    <div class="canvas canvas--net" id="netHost" aria-label="箱体展开图，点击可编辑面进入编辑"></div>
     <div class="statusbar">
       <span id="netSize">—</span>
       <span class="dot" aria-hidden="true"></span>
@@ -210,7 +210,7 @@
     </div>
     <div class="help-body">
       <ol>
-        <li><b>选箱型与输尺寸</b>：当前只支持「矩形箱 / RSC 开槽箱」，L 为长、W 为宽、H 为高，单位可切毫米或厘米。</li>
+        <li><b>选箱型与输尺寸</b>：矩形箱输 L / W / H；斜形箱输 L / W / H(前) / H(后)；L 形箱输 L / W(前) / W(后) / H(前) / H(后)，总深 W 自动算。单位可切毫米 / 厘米 / 英寸。</li>
         <li><b>看两张图</b>：左侧等轴测轮廓看立体比例，右侧展开图看刀模布局，尺寸线随输入实时变化。</li>
         <li><b>进编辑器</b>：点展开图上任意一个可编辑面（4 箱身面 + 4 主摇盖），下方出现放大编辑区和属性面板。</li>
         <li><b>加内容</b>：点面板空白处弹出新建窗口，可加文字（内容/字号/加粗/对齐）或图片（本机压缩后保存，不上传服务器）。</li>

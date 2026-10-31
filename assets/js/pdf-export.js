@@ -237,7 +237,8 @@ export async function imageReport(net, panels) {
           px: info.width,
           dpi: imageDpi(element, info.width),
         });
-      } catch {
+      } catch (err) {
+        console.warn('图片尺寸读不出来，按 0 dpi 记录', err);
         rows.push({ panelKey: key, panelLabel: panels[key].label, width: element.w, height: element.h, px: 0, dpi: 0, error: true });
       }
     }
@@ -344,7 +345,8 @@ export async function exportPdf({ net, panels, dims, mode = 'sheet', tilePaper =
             lowDpi.push(`${Math.round(dpi)} dpi（${Math.round(element.w)} × ${Math.round(element.h)} mm）`);
           }
           doc.addImage(element.src, imageFormat(element.src), dx, dy, element.w * drawScale, element.h * drawScale);
-        } catch {
+        } catch (err) {
+          console.warn('图片解码失败，导出时跳过', err);
           warnings.push('有一张图片解码失败，已跳过');
         }
       }

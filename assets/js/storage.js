@@ -76,7 +76,8 @@ export async function saveProject(payload) {
         /* ignore */
       }
       return 'idb';
-    } catch {
+    } catch (err) {
+      console.error('草稿写入 IndexedDB 也失败了，本次改动没保存', err);
       return 'none';
     }
   }
@@ -96,16 +97,16 @@ export async function loadProject() {
       const data = await idbGet();
       const parsed = parseDraft(data);
       if (parsed) return parsed;
-    } catch {
-      /* 落到 localStorage 兜底 */
+    } catch (err) {
+      console.warn('IndexedDB 读取失败，回落到 localStorage', err);
     }
   }
 
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (raw) return parseDraft(JSON.parse(raw));
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('localStorage 草稿读取失败', err);
   }
   return null;
 }

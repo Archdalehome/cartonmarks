@@ -165,8 +165,8 @@ function renderAccount() {
 async function logout() {
   try {
     await api.logout();
-  } catch {
-    /* 掉线也当作登出处理 */
+  } catch (err) {
+    console.warn('登出请求失败，按本地登出处理', err);
   }
   await refreshAccount();
   toast('已退出登录');

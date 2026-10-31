@@ -112,7 +112,8 @@ export function parseDraft(data) {
       shape,
       panels: rawPanels,
     };
-  } catch {
+  } catch (err) {
+    console.warn('草稿解析失败，已忽略这份数据', err);
     return null;
   }
 }
