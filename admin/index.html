@@ -14,6 +14,7 @@
       .admin-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
       .admin-bar input { height: 34px; padding: 0 10px; border: 1px solid var(--line-2, #d8e0ea); border-radius: 8px; width: 240px; }
       .admin-status { font-size: 13px; color: var(--muted, #64748b); min-height: 20px; margin-bottom: 10px; }
+      .admin-note { font-size: 12.5px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
       .admin-status.is-error { color: #b91c1c; }
       table.admin-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(15,23,42,.08); }
       .admin-table th, .admin-table td { text-align: left; padding: 10px 12px; font-size: 13.5px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
@@ -42,6 +43,10 @@
         <button type="button" class="btn" id="searchBtn">搜索</button>
         <button type="button" class="btn btn-ghost" id="resetBtn">清空</button>
         <button type="button" class="btn btn-ghost" id="refreshBtn">刷新</button>
+      </div>
+
+      <div class="admin-note">
+        提示：新注册用户可能延迟约 1 分钟才出现在列表里（KV 列表最终一致），刷新一下即可。
       </div>
 
       <div class="admin-status" id="status"></div>
