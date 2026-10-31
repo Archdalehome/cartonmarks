@@ -90,9 +90,10 @@ function computeBevel(dims, shapeId) {
   const W = pos(dims.W, 1);
 
   const bottomDepth = W * FLAP_DEPTH_RATIO; // 底盖深 W/2
-  const slope = Math.hypot(W, Hb - Hf); // 斜顶盖展开长度
+  const slope = Math.hypot(W, Hb - Hf); // 斜面实长（两片顶摇盖合计）
+  const half = slope / 2; // 一片顶摇盖的深度（用户 2026-10-31 确认：两片各一半）
   const width = 2 * L + 2 * W;
-  const height = bottomDepth + Hf + slope;
+  const height = bottomDepth + Math.max(Hf, Hb) + half;
 
   const x0 = 0;
   const x1 = L;
@@ -101,9 +102,10 @@ function computeBevel(dims, shapeId) {
   const x4 = 2 * L + 2 * W;
 
   const yBot = height - bottomDepth;
-  const yF = yBot - Hf; // 前面板顶边 = 顶盖根部折线
-  const yLidTop = yF - slope; // 顶盖最远边
-  const yB = yBot - Hb;
+  const yF = yBot - Hf; // 前面板顶边 = 前顶摇盖折线
+  const yFTop = yF - half; // 前顶摇盖最远边
+  const yB = yBot - Hb; // 后面板顶边 = 后顶摇盖折线
+  const yBTop = yB - half; // 后顶摇盖最远边
 
   const panels = {
     front: rectPanel('前箱唛', 'body', x0, yF, L, Hf),
@@ -121,8 +123,9 @@ function computeBevel(dims, shapeId) {
       [x3, yB],
     ]),
 
-    // 顶盖：一整片单摇盖，中间不折
-    topLid: rectPanel('斜顶盖箱唛', 'major', x0, yLidTop, L, slope),
+    // 顶摇盖：两片对开，各占斜面实长的一半
+    topFront: rectPanel('前顶箱唛', 'major', x0, yFTop, L, half),
+    topBack: rectPanel('后顶箱唛', 'major', x2, yBTop, L, half),
 
     // 底面平的：两片主摇盖
     bottomFront: rectPanel('前底箱唛', 'major', x0, yBot, L, bottomDepth),
@@ -134,9 +137,9 @@ function computeBevel(dims, shapeId) {
   };
 
   const folds = [
-    hFold(x0, x1, yF), // 前面板 ↔ 顶盖
+    hFold(x0, x1, yF), // 前面板 ↔ 前顶摇盖
+    hFold(x2, x3, yB), // 后面板 ↔ 后顶摇盖
     hFold(x0, x1, yBot), // 前面板 ↔ 前底摇盖
-    hFold(x2, x3, yB), // 后面板 ↔ 后底摇盖
     hFold(x2, x3, yBot),
     vFold(x1, yF, yBot),
     vFold(x2, yB, yBot),
@@ -157,10 +160,12 @@ function computeBevel(dims, shapeId) {
     panels,
     outline: outlineOf(
       [
-        [x0, yLidTop],
-        [x1, yLidTop],
+        [x0, yFTop],
+        [x1, yFTop],
         [x1, yF],
         [x2, yB],
+        [x2, yBTop],
+        [x3, yBTop],
         [x3, yB],
         [x4, yF],
       ],
@@ -170,7 +175,7 @@ function computeBevel(dims, shapeId) {
     folds,
     cuts: [],
     dims: { L, W, Hfront: Hf, Hback: Hb },
-    lid: { key: 'topLid', length: slope, roots: [] },
+    lid: { kind: 'split', keys: ['topFront', 'topBack'], length: slope, piece: half },
   };
 }
 
@@ -345,6 +350,11 @@ function profileOf(shapeId, dims) {
  */
 export function computeIsoShape(dims, shapeId) {
   const L = pos(dims.L, 1);
+  // 与 computeNet 用同一个宽度口径：斜形用 W，L 形用 W(前)+W(后)
+  const W =
+    shapeId === 'bevel'
+      ? pos(dims.W, 1)
+      : Number(dims.Wfront) + Number(dims.Wback);
   const profile = profileOf(shapeId, dims);
   const n = profile.length;
 
@@ -398,9 +408,16 @@ export function computeIsoShape(dims, shapeId) {
 
   const idx = (Ywant, Zwant) =>
     profile.findIndex((p) => Math.abs(p[0] - Ywant) < 1e-6 && Math.abs(p[1] - Zwant) < 1e-6);
-  const frontBottom = idx(pos(dims.Wfront ? Number(dims.Wfront) + Number(dims.Wback) : dims.W, 1), 0);
+  const frontBottom = idx(W, 0);
   const backBottom = idx(0, 0);
-  const frontTop = profile.findIndex((p) => Math.abs(p[1]) > 1e-9 && Math.abs(p[0] - pos(dims.Wfront ? Number(dims.Wfront) + Number(dims.Wback) : dims.W, 1)) < 1e-6);
+  const frontTop = profile.findIndex(
+    (p) => Math.abs(p[1]) > 1e-9 && Math.abs(p[0] - W) < 1e-6,
+  );
+  // 剖面点没找到时不能拼出 'b-1' 这种不存在的角，回落到底面角
+  const at = (j, fallback) => (j >= 0 && j < n ? j : fallback);
+  const iF = at(frontBottom, 0);
+  const iB = at(backBottom, 0);
+  const iT = at(frontTop, iF);
 
   return {
     corners,
@@ -408,11 +425,11 @@ export function computeIsoShape(dims, shapeId) {
     edges,
     faces,
     anchors: {
-      L: ['a' + frontBottom, 'b' + frontBottom],
-      W: ['b' + backBottom, 'b' + frontBottom],
-      H: ['b' + frontBottom, 'b' + (frontTop >= 0 ? frontTop : backBottom)],
+      L: ['a' + iF, 'b' + iF],
+      W: ['b' + iB, 'b' + iF],
+      H: ['b' + iF, 'b' + iT],
     },
-    dims: { ...dims, L, W: pos(dims.Wfront ? Number(dims.Wfront) + Number(dims.Wback) : dims.W, 1) },
+    dims: { ...dims, L, W },
   };
 }
 

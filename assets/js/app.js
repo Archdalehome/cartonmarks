@@ -244,18 +244,8 @@ function mergeDraftPanels(rawPanels) {
   }
 }
 
-/** 订阅门：未订阅点 L 形/斜形/模板 → 弹订阅；已订阅 → 说明 M8/M9 未开放 */
+/** 订阅门：模板入口未订阅先弹订阅（箱型门在箱型下拉里） */
 function bindAccountGate() {
-  document.querySelectorAll('[data-locked-shape]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (!isSubscribed()) {
-        openSubscribe();
-        return;
-      }
-      showToast('L 形 / 斜形箱的尺寸参数还在确认（M8），确认后开放');
-    });
-  });
-
   dom.templatesBtn?.addEventListener('click', () => {
     if (!isSubscribed()) {
       openSubscribe();
@@ -267,10 +257,6 @@ function bindAccountGate() {
 
 function onAccountChanged(acc) {
   if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
-  document.querySelectorAll('[data-locked-shape]').forEach((btn) => {
-    const name = btn.dataset.lockedShape === 'lshape' ? 'L 形箱' : '斜形箱';
-    btn.textContent = acc.subscribed ? `${name}（已解锁，请用上方箱型下拉）` : `${name} 🔒`;
-  });
   if (dom.templatesBtn) {
     dom.templatesBtn.classList.toggle('is-locked', !acc.subscribed);
     dom.templatesBtn.textContent = acc.subscribed ? '模板' : '模板 🔒';
@@ -303,11 +289,8 @@ function buildShapeSelect() {
     const opt = document.createElement('option');
     opt.value = s.id;
     const locked = s.subscriberOnly && !isSubscribed();
-    opt.textContent = !s.enabled
-      ? `${s.name}（即将支持）`
-      : locked
-        ? `${s.name}（订阅可用）`
-        : s.name;
+    // 标签只留箱型名，订阅状态靠下拉是否可点表示
+    opt.textContent = s.name;
     opt.disabled = !s.enabled || locked;
     dom.shape.appendChild(opt);
   }
@@ -501,23 +484,31 @@ function render() {
   else {
     try {
       renderIso(dom.isoHost, computeIsoShape(dims, state.shape));
-    } catch {
+      dom.isoHost.dataset.isoError = '';
+    } catch (err) {
+      console.error('iso failed', err);
+      dom.isoHost.dataset.isoError = String((err && err.message) || err);
       dom.isoHost.replaceChildren();
     }
   }
 
   const { L, W } = dims;
   const hasFront = state.shape !== 'rsc';
+  const geoDims = lastNet.dims;
   const isoDims = hasFront
-    ? `${fmt(L)} × ${fmt(dims.Wfront + dims.Wback)} × ${fmt(dims.Hfront)}/${fmt(dims.Hback)} mm`
+    ? `${fmt(geoDims.L)} × ${fmt(geoDims.W)} × ${fmt(geoDims.Hfront)}/${fmt(geoDims.Hback)} mm`
     : `${fmt(L)} × ${fmt(W)} × ${fmt(dims.H)} mm`;
   dom.isoMeta.textContent = isoDims;
   dom.netMeta.textContent = `按容器宽度等比缩放 · 实际 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm`;
+  const lidText = lastNet.lid
+    ? lastNet.lid.kind === 'split'
+      ? `顶摇盖 ${fmt(geoDims.L)} × ${fmt(lastNet.lid.length)}（两片各 ${fmt(lastNet.lid.piece)}）`
+      : `顶盖 ${fmt(geoDims.L)} × ${fmt(lastNet.lid.length)}（一整片）`
+    : '';
   dom.netSize.textContent =
     `展开 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm · ` +
     (hasFront
-      ? `箱身 ${fmt(L)} × ${fmt(lastNet.dims.W)} · 高 ${fmt(lastNet.dims.Hfront)}/${fmt(lastNet.dims.Hback)} · ` +
-        `顶盖 ${fmt(L)} × ${fmt(lastNet.panels.topLid.h)}（一整片）`
+      ? `箱身 ${fmt(geoDims.L)} × ${fmt(geoDims.W)} · 高 ${fmt(geoDims.Hfront)}/${fmt(geoDims.Hback)} · ${lidText}`
       : `箱身 ${fmt(L)}/${fmt(W)} × ${fmt(dims.H)} · ` +
         `主摇盖 ${fmt(L)} × ${fmt(lastNet.flap)} · 防尘摇盖 ${fmt(W)} × ${fmt(lastNet.flap)}（不印）`);
 
@@ -527,9 +518,12 @@ function render() {
     dom.netTitle.textContent = `展开图 · ${panelCount} 个区域 / ${editableCount} 个可编辑面`;
   }
   if (dom.footnote) {
-    dom.footnote.textContent = hasFront
-      ? '虚线为折叠线，实线为裁切线。顶部是从前面板翻过去的一整片单摇盖（斜形 = √(W²+ΔH²)，L 形 = W前 + |ΔH| + W后，片内折线画虚线）；底面 2 片主摇盖加 2 片侧面防尘摇盖（仅结构件，不印箱唛）；内部一律按真实毫米计算。'
-      : '虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，仅结构件，不印箱唛）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。';
+    dom.footnote.textContent =
+      state.shape === 'bevel'
+        ? '虚线为折叠线，实线为裁切线。顶部是两片对开摇盖（前后各一片，每片 600 宽、深 = 斜面实长 √(W²+ΔH²) 的一半，两片合计 = 斜长）；底面 2 片主摇盖加 2 片侧面防尘摇盖（仅结构件，不印箱唛）；内部一律按真实毫米计算。'
+        : state.shape === 'lshape'
+          ? '虚线为折叠线，实线为裁切线。顶部是从前面板翻过去的一整片单摇盖（深度 = W前 + |ΔH| + W后，片内两条折线画虚线）；底面 2 片主摇盖加 2 片侧面防尘摇盖（仅结构件，不印箱唛）；内部一律按真实毫米计算。'
+          : '虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，仅结构件，不印箱唛）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。';
   }
 
   updateSelectionInfo();

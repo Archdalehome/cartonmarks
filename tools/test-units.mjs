@@ -1,4 +1,4 @@
-﻿/**
+/**
  * tools/test-units.mjs —— 尺寸输入防呆的断言
  * 用法：node tools/test-units.mjs
  */
@@ -76,6 +76,48 @@ check('输入 24 in 校验通过并换算成 609.6 mm', () => {
 check('英寸下同样有最小值/最大值保护', () => {
   assert.equal(validateDim('0.5', 'in', '长 L').ok, false);
   assert.equal(validateDim('200', 'in', '长 L').ok, false);
+});
+
+console.log('单位来回切换不改变数据（mm → cm → in → mm）');
+
+/** 模拟页面切换单位：把状态里的毫米值按新单位写进输入框，再按新单位读回来 */
+function roundTrip(mm, units) {
+  let value = mm;
+  for (const unit of units) {
+    const shown = displayValue(value, unit);
+    const parsed = validateDim(String(shown), unit, '长 L');
+    assert.equal(parsed.ok, true, `${unit} 下 ${shown} 应能通过校验`);
+    value = parsed.mm;
+  }
+  return value;
+}
+
+check('600 mm 经过 cm / in 来回后仍是 600 mm', () => {
+  const back = roundTrip(600, ['cm', 'in', 'mm']);
+  assert.ok(Math.abs(back - 600) < 1e-6, `实际 ${back}`);
+});
+
+check('397 mm 经过 in / cm / mm 后仍是 397 mm', () => {
+  const back = roundTrip(397, ['in', 'cm', 'mm']);
+  assert.ok(Math.abs(back - 397) < 1e-6, `实际 ${back}`);
+});
+
+check('切单位后展开图总尺寸不变（斜形箱 600×397）', async () => {
+  const { computeNet } = await import('../assets/js/geometry.js');
+  await import('../assets/js/geometry-shapes.js');
+  const dims = { L: 600, W: 397, Hfront: 500, Hback: 650 };
+  const before = computeNet(dims, 'bevel');
+  const after = computeNet(
+    {
+      L: roundTrip(600, ['cm', 'in', 'mm']),
+      W: roundTrip(397, ['in', 'mm']),
+      Hfront: roundTrip(500, ['cm', 'mm']),
+      Hback: roundTrip(650, ['in', 'cm', 'mm']),
+    },
+    'bevel',
+  );
+  assert.equal(after.width, before.width, '总宽不能因为换单位而变');
+  assert.ok(Math.abs(after.height - before.height) < 1e-6, '总高不能因为换单位而变');
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

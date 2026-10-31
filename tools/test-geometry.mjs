@@ -193,22 +193,35 @@ const lshapeDims = { L: 600, Hfront: 300, Hback: 450, Wfront: 250, Wback: 150 };
 const bevel = computeNet(bevelDims, 'bevel');
 const lshape = computeNet(lshapeDims, 'lshape');
 const SLOPE = Math.hypot(400, 150); // 427.2002
+const HALF = SLOPE / 2; // 213.6
 
-check('斜形箱：顶部一整片 600×427.2，总高 = 300 + 427.2 + 200 = 927.2', () => {
+check('斜形箱：顶部两片对开摇盖 600×213.6，两片合计 = 斜长 427.2', () => {
   assert.equal(bevel.width, 2000);
-  assert.ok(Math.abs(bevel.height - (300 + SLOPE + 200)) < 1e-9);
-  assert.equal(bevel.panels.topLid.w, 600);
-  assert.ok(Math.abs(bevel.panels.topLid.h - SLOPE) < 1e-9);
-  assert.equal(bevel.panels.topLid.w * 1, 600);
+  assert.equal(bevel.panels.topFront.w, 600);
+  assert.equal(bevel.panels.topBack.w, 600);
+  assert.ok(Math.abs(bevel.panels.topFront.h - HALF) < 1e-9);
+  assert.ok(Math.abs(bevel.panels.topBack.h - HALF) < 1e-9);
+  assert.ok(Math.abs(bevel.panels.topFront.h + bevel.panels.topBack.h - SLOPE) < 1e-9);
 });
 
-check('斜形箱：顶部只有一片，没有前顶/后顶两片，也没有顶部防尘摇盖', () => {
-  assert.equal(bevel.panels.topFront, undefined);
-  assert.equal(bevel.panels.topBack, undefined);
+check('斜形箱：总高 = 底盖 200 + max(H前,H后) 450 + 半片 213.6 = 863.6', () => {
+  assert.ok(Math.abs(bevel.height - (200 + 450 + HALF)) < 1e-9);
+  assert.equal(Object.keys(bevel.panels).length, 10);
+  assert.equal(Object.values(bevel.panels).filter((p) => p.editable).length, 8);
+});
+
+check('斜形箱：顶部没有防尘摇盖，防尘摇盖只有底面两片', () => {
   const topDust = Object.entries(bevel.panels).filter(
     ([, p]) => p.kind === 'minor' && p.y + p.h <= bevel.panels.front.y + 1e-9,
   );
   assert.equal(topDust.length, 0);
+  assert.equal(Object.values(bevel.panels).filter((p) => p.kind === 'minor').length, 2);
+});
+
+check('斜形箱：W 只认 W 输入，不被残留的 W(前)/W(后) 干扰', () => {
+  const n = computeNet({ L: 600, W: 397, Wfront: 250, Wback: 150, Hfront: 500, Hback: 650 }, 'bevel');
+  assert.equal(n.dims.W, 397);
+  assert.equal(n.width, 2 * 600 + 2 * 397);
 });
 
 check('斜形箱：左右侧面是四点梯形，前边 300、后边 450', () => {
@@ -282,10 +295,11 @@ check('底面：2 片主摇盖各 W/2 + 2 片侧面防尘摇盖（不可编辑�
 
 console.log('闭合测试（折起来要盖满、不重叠）');
 
-check('斜形箱闭合：整片顶盖长度 = 剖面实长 427.2，深度正好 W', () => {
+check('斜形箱闭合：两片顶摇盖合计 = 斜面实长 427.2，每片一半', () => {
   const r = checkClosure(bevel, 'bevel', bevelDims);
   assert.ok(r.ok, r.errors.join('；'));
-  assert.equal(r.top.folds.length, 0, '斜顶盖中间不折');
+  assert.equal(r.top.pieces, 2);
+  assert.ok(Math.abs(r.top.len - SLOPE) < 1e-9);
   assert.ok(Math.abs(r.bottom.sum - 400) < 1e-9);
   assert.equal(r.bottom.dust, 2);
 });
@@ -297,20 +311,22 @@ check('L 形箱闭合：整片顶盖 550，两条折线落段界，深度 250+0+
   assert.ok(Math.abs(r.bottom.sum - 400) < 1e-9);
 });
 
-check('闭合测试能抓出旧的四片摇盖（回归：两片各 200 只有 400 < 427.2）', () => {
-  const oldBevel = {
+check('闭合测试能抓出「斜形箱只有一片顶盖」（回归：一片 427.2 ≠ 两片各半）', () => {
+  const oneLid = {
     panels: {
-      front: { editable: true, x: 0, y: 350, w: 600, h: 300 },
-      topFront: { editable: true, x: 0, y: 150, w: 600, h: 200 },
-      topBack: { editable: true, x: 1000, y: 0, w: 600, h: 200 },
-      bottomFront: { editable: true, x: 0, y: 650, w: 600, h: 200 },
-      bottomBack: { editable: true, x: 1000, y: 650, w: 600, h: 200 },
+      front: { editable: true, x: 0, y: 600, w: 600, h: 300 },
+      topLid: { editable: true, x: 0, y: 172.8, w: 600, h: 427.2 },
+      back: { editable: true, x: 1000, y: 450, w: 600, h: 450 },
+      bottomFront: { editable: true, x: 0, y: 900, w: 600, h: 200 },
+      bottomBack: { editable: true, x: 1000, y: 900, w: 600, h: 200 },
+      dustA: { editable: false, kind: 'minor', x: 600, y: 900, w: 400, h: 200 },
+      dustB: { editable: false, kind: 'minor', x: 1600, y: 900, w: 400, h: 200 },
     },
     folds: [],
   };
-  const r = checkClosure(oldBevel, 'bevel', bevelDims);
-  assert.equal(r.ok, false, '旧结构必须被判不合格');
-  assert.ok(r.errors.some((e) => e.includes('顶盖')), r.errors.join('；'));
+  const r = checkClosure(oneLid, 'bevel', bevelDims);
+  assert.equal(r.ok, false, '单片顶盖必须被判不合格');
+  assert.ok(r.errors.some((e) => e.includes('两片')), r.errors.join('；'));
 });
 
 check('闭合测试能抓出「L 形少一块竖壁」（回归：顶盖只有 400 长）', () => {

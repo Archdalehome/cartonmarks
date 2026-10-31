@@ -47,15 +47,16 @@ const EPS = 0.01;
 
 const overlapX = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 1e-9;
 
-/** 贴在 front 上边缘（y 更小）往上的一片顶盖 */
-export function lidAbove(net) {
-  const front = net.panels.front;
+/** 贴在某个箱身面上边缘（y 更小）往上的摇盖 */
+export function lidAbove(net, key = 'front') {
+  const body = net.panels[key];
+  if (!body) return [];
   return Object.entries(net.panels).filter(
     ([k, p]) =>
-      k !== 'front' &&
+      k !== key &&
       p.editable &&
-      Math.abs(p.y + p.h - front.y) < 1e-6 &&
-      overlapX(p, front),
+      Math.abs(p.y + p.h - body.y) < 1e-6 &&
+      overlapX(p, body),
   );
 }
 
@@ -97,26 +98,56 @@ export function checkClosure(net, shape, dims) {
   const profileLen = profile.reduce((a, p) => a + p.len, 0);
   const W = boxDepth(shape, dims);
 
-  const lids = lidAbove(net);
+  const frontLids = lidAbove(net, 'front');
+  const backLids = lidAbove(net, 'back');
   const result = {
     ok: false,
     errors,
-    top: { len: 0, profileLen, folds: [], wantFolds: [] },
+    top: { len: 0, profileLen, folds: [], wantFolds: [], pieces: frontLids.length + backLids.length },
     bottom: { sum: 0, want: W, dust: 0 },
   };
 
-  if (lids.length !== 1) {
-    errors.push(`顶部应是 1 片整摇盖，实际 ${lids.length} 片`);
-    return result;
+  if (shape === 'bevel') {
+    // 斜形箱：前后各一片对开摇盖，两片合计 = 斜面实长
+    if (frontLids.length !== 1 || backLids.length !== 1) {
+      errors.push(
+        `斜形箱顶部应是两片对开摇盖（前后各一），实际 ${frontLids.length} + ${backLids.length} 片`,
+      );
+      return result;
+    }
+    const sum = frontLids[0][1].h + backLids[0][1].h;
+    result.top.len = sum;
+    if (Math.abs(sum - profileLen) > EPS) {
+      errors.push(
+        `两片顶摇盖合计 ${sum.toFixed(2)} ≠ 斜面实长 ${profileLen.toFixed(2)}（盖不满或盖过头）`,
+      );
+    }
+    for (const [k, p] of [...frontLids, ...backLids]) {
+      if (Math.abs(p.h - profileLen / 2) > EPS) {
+        errors.push(`顶摇盖 ${k} 深 ${p.h.toFixed(2)} ≠ 斜长一半 ${(profileLen / 2).toFixed(2)}`);
+      }
+      if (Math.abs(p.w - Number(dims.L)) > EPS) {
+        errors.push(`顶摇盖 ${k} 宽 ${p.w.toFixed(2)} ≠ L ${Number(dims.L).toFixed(2)}`);
+      }
+    }
+  } else {
+    if (frontLids.length !== 1 || backLids.length !== 0) {
+      errors.push(
+        `L 形箱顶部应是 1 片整摇盖，实际 ${frontLids.length} + ${backLids.length} 片`,
+      );
+      return result;
+    }
   }
 
-  const lid = lids[0][1];
-  result.top.len = lid.h;
-  if (Math.abs(lid.h - profileLen) > EPS) {
-    errors.push(
-      `顶盖展开长度 ${lid.h.toFixed(2)} ≠ 剖面实长 ${profileLen.toFixed(2)}（盖不满或盖过头）`,
-    );
-  }
+  if (shape !== 'bevel') {
+    const lids = frontLids;
+    const lid = lids[0][1];
+    result.top.len = lid.h;
+    if (Math.abs(lid.h - profileLen) > EPS) {
+      errors.push(
+        `顶盖展开长度 ${lid.h.toFixed(2)} ≠ 剖面实长 ${profileLen.toFixed(2)}（盖不满或盖过头）`,
+      );
+    }
   if (Math.abs(lid.w - Number(dims.L)) > EPS) {
     errors.push(`顶盖宽度 ${lid.w.toFixed(2)} ≠ L ${Number(dims.L).toFixed(2)}`);
   }
@@ -139,6 +170,7 @@ export function checkClosure(net, shape, dims) {
         errors.push(`第 ${i + 1} 条折线距根部 ${f.toFixed(2)} ≠ ${wantFolds[i].toFixed(2)}`);
       }
     });
+  }
   }
 
   // 深度：各段前进量之和应等于箱深（分段内不能回退）

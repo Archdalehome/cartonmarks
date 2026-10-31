@@ -5,9 +5,9 @@
  * 为后续箱型（L 形、斜形）预留的扩展点是 geometry.registerShapeGeometry。
  */
 
-/** 可选箱型；subscriberOnly 的箱型要在订阅后才可选（游客仍看到的入口是带锁按钮） */
+/** 可选箱型；subscriberOnly 的箱型要在订阅后才可选 */
 export const SHAPES = [
-  { id: 'rsc', name: '矩形箱 / RSC 开槽箱', enabled: true },
+  { id: 'rsc', name: '矩形箱', enabled: true },
   { id: 'lshape', name: 'L 形箱', enabled: true, subscriberOnly: true },
   { id: 'bevel', name: '斜形箱', enabled: true, subscriberOnly: true },
 ];
