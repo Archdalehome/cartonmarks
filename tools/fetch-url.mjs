@@ -11,8 +11,10 @@ import tls from 'node:tls';
 import { URL } from 'node:url';
 
 const target = new URL(process.argv[2] || 'https://cartonmarks.pages.dev/');
-const proxy = new URL(process.argv[3] || 'socks5h://127.0.0.1:10808');
+const proxy = new URL(process.env.CM_PROXY || 'socks5h://127.0.0.1:10808');
 const port = Number(target.port || (target.protocol === 'https:' ? 443 : 80));
+const method = (process.argv[3] || 'GET').toUpperCase();
+const body = process.argv[4] || '';
 
 function socksConnect(host, destPort) {
   return new Promise((resolve, reject) => {
@@ -78,11 +80,15 @@ if (target.protocol === 'https:') {
 }
 
 stream.write(
-  `GET ${target.pathname}${target.search} HTTP/1.1\r\n` +
+  `${method} ${target.pathname}${target.search} HTTP/1.1\r\n` +
     `Host: ${target.hostname}\r\n` +
     'User-Agent: cartonmark-deploy-check\r\n' +
     'Accept: */*\r\n' +
-    'Connection: close\r\n\r\n',
+    (body
+      ? `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n`
+      : '') +
+    'Connection: close\r\n\r\n' +
+    body,
 );
 
 const text = await readAll(stream);
