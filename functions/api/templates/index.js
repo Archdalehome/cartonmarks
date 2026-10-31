@@ -7,7 +7,7 @@ import {
   fail,
   json,
   readJsonBody,
-  backendUnavailable,
+  backendUnavailable, getKV, kvUnavailable,
 } from '../../../lib/api/http.js';
 import { requireUser, randomId } from '../../../lib/api/auth.js';
 
@@ -27,17 +27,19 @@ async function requireSubscribed(request, kv) {
 }
 
 export const onRequestGet = guard(async ({ request, env }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
-  const { auth, error } = await requireSubscribed(request, env.CM_KV);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
+  const { auth, error } = await requireSubscribed(request, kv);
   if (error) return error;
 
-  const items = (await env.CM_KV.get(`cm:tpls:${auth.user.id}`, 'json')) || [];
+  const items = (await kv.get(`cm:tpls:${auth.user.id}`, 'json')) || [];
   return json({ items });
 });
 
 export const onRequestPost = guard(async ({ request, env }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
-  const { auth, error } = await requireSubscribed(request, env.CM_KV);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
+  const { auth, error } = await requireSubscribed(request, kv);
   if (error) return error;
 
   const body = await readJsonBody(request);
@@ -58,7 +60,7 @@ export const onRequestPost = guard(async ({ request, env }) => {
   const bytes = new TextEncoder().encode(dataJson).length;
   if (bytes > MAX_BYTES) return fail('too_large', '模板数据超过 512 KB', 413);
 
-  const list = (await env.CM_KV.get(`cm:tpls:${auth.user.id}`, 'json')) || [];
+  const list = (await kv.get(`cm:tpls:${auth.user.id}`, 'json')) || [];
   if (list.length >= MAX_TEMPLATES) {
     return fail('tpl_limit', `模板数量已达上限（${MAX_TEMPLATES} 个）`, 409);
   }
@@ -67,8 +69,8 @@ export const onRequestPost = guard(async ({ request, env }) => {
   const now = new Date().toISOString();
   const record = { id, name, data: body.data, updatedAt: now };
 
-  await env.CM_KV.put(`cm:tpl:${auth.user.id}:${id}`, JSON.stringify(record));
-  await env.CM_KV.put(
+  await kv.put(`cm:tpl:${auth.user.id}:${id}`, JSON.stringify(record));
+  await kv.put(
     `cm:tpls:${auth.user.id}`,
     JSON.stringify([...list, { id, name, updatedAt: now }]),
   );

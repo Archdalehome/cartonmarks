@@ -7,7 +7,7 @@ import {
   json,
   readJsonBody,
   sessionCookie,
-  backendUnavailable,
+  backendUnavailable, getKV, kvUnavailable,
 } from '../../../lib/api/http.js';
 import {
   normalizeEmail,
@@ -25,9 +25,8 @@ const CODE_TTL = 600;
 const MAX_TRIES = 5;
 
 export const onRequestPost = guard(async ({ request, env }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
-  const kv = env.CM_KV;
-
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
   const body = await readJsonBody(request);
   if (!body) return fail('invalid_request', '请求格式不对', 400);
 

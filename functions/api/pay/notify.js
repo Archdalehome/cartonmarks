@@ -1,7 +1,7 @@
 /**
  * POST /api/pay/notify —— Xorpay 异步回调，成功必须 200 纯文本 ok
  */
-import { guard, requireEnv, backendUnavailable } from '../../../lib/api/http.js';
+import { guard, requireEnv, backendUnavailable, getKV, kvUnavailable } from '../../../lib/api/http.js';
 import { xorpayNotifySign, settleOrder } from '../../../lib/api/pay.js';
 
 function text(body, status) {
@@ -12,7 +12,8 @@ function text(body, status) {
 }
 
 export const onRequestPost = guard(async ({ request, env }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
   const missing = requireEnv(env, ['XORPAY_SECRET']);
   if (missing.length) return backendUnavailable(missing);
 
@@ -42,7 +43,7 @@ export const onRequestPost = guard(async ({ request, env }) => {
     return text('bad sign', 400);
   }
 
-  const order = await env.CM_KV.get(`cm:order:${orderId}`, 'json');
+  const order = await kv.get(`cm:order:${orderId}`, 'json');
   if (!order) {
     console.error('[api] notify order not found', orderId);
     return text('order not found', 404);
@@ -52,6 +53,6 @@ export const onRequestPost = guard(async ({ request, env }) => {
     console.error('[api] notify amount mismatch', orderId, payPrice, order.amount);
   }
 
-  await settleOrder(env.CM_KV, orderId);
+  await settleOrder(kv, orderId);
   return text('ok', 200);
 });

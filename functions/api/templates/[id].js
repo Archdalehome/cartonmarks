@@ -2,12 +2,7 @@
  * GET    /api/templates/:id
  * DELETE /api/templates/:id
  */
-import {
-  guard,
-  fail,
-  json,
-  backendUnavailable,
-} from '../../../lib/api/http.js';
+import { guard, fail, json, getKV, kvUnavailable } from '../../../lib/api/http.js';
 import { requireUser } from '../../../lib/api/auth.js';
 
 async function requireSubscribed(request, kv) {
@@ -22,32 +17,34 @@ async function requireSubscribed(request, kv) {
 }
 
 export const onRequestGet = guard(async ({ request, env, params }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
-  const { auth, error } = await requireSubscribed(request, env.CM_KV);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
+  const { auth, error } = await requireSubscribed(request, kv);
   if (error) return error;
 
   const id = String((params && params.id) || '');
   if (!id) return fail('tpl_not_found', '模板不存在', 404);
 
-  const record = await env.CM_KV.get(`cm:tpl:${auth.user.id}:${id}`, 'json');
+  const record = await kv.get(`cm:tpl:${auth.user.id}:${id}`, 'json');
   if (!record) return fail('tpl_not_found', '模板不存在', 404);
 
   return json(record);
 });
 
 export const onRequestDelete = guard(async ({ request, env, params }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
-  const { auth, error } = await requireSubscribed(request, env.CM_KV);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
+  const { auth, error } = await requireSubscribed(request, kv);
   if (error) return error;
 
   const id = String((params && params.id) || '');
   const key = `cm:tpl:${auth.user.id}:${id}`;
-  const record = await env.CM_KV.get(key, 'json');
+  const record = await kv.get(key, 'json');
   if (!record) return fail('tpl_not_found', '模板不存在', 404);
 
-  await env.CM_KV.delete(key);
-  const list = (await env.CM_KV.get(`cm:tpls:${auth.user.id}`, 'json')) || [];
-  await env.CM_KV.put(
+  await kv.delete(key);
+  const list = (await kv.get(`cm:tpls:${auth.user.id}`, 'json')) || [];
+  await kv.put(
     `cm:tpls:${auth.user.id}`,
     JSON.stringify(list.filter((item) => item.id !== id)),
   );

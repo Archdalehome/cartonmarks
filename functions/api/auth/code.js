@@ -10,7 +10,7 @@ import {
   yyyymmdd,
   clientIp,
   requireEnv,
-  backendUnavailable,
+  backendUnavailable, getKV, kvUnavailable,
 } from '../../../lib/api/http.js';
 import { normalizeEmail, isValidEmail, randomDigits } from '../../../lib/api/auth.js';
 
@@ -29,15 +29,14 @@ function emailHtml(code) {
 }
 
 export const onRequestPost = guard(async ({ request, env }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
   const missing = requireEnv(env, ['RESEND_API_KEY', 'RESEND_FROM']);
   if (missing.length) return backendUnavailable(missing);
 
   const body = await readJsonBody(request);
   const email = normalizeEmail(body && body.email);
   if (!isValidEmail(email)) return fail('invalid_email', '邮箱格式不对', 400);
-
-  const kv = env.CM_KV;
   const now = Date.now();
   const day = yyyymmdd(now);
 

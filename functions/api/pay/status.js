@@ -6,23 +6,22 @@ import {
   fail,
   json,
   requireEnv,
-  backendUnavailable,
+  backendUnavailable, getKV, kvUnavailable,
 } from '../../../lib/api/http.js';
 import { requireUser } from '../../../lib/api/auth.js';
 import { xorpayQuerySign, normalizeStatus, isPaidStatus, settleOrder } from '../../../lib/api/pay.js';
 
 export const onRequestGet = guard(async ({ request, env }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
   const missing = requireEnv(env, ['XORPAY_AID', 'XORPAY_SECRET']);
   if (missing.length) return backendUnavailable(missing);
 
-  const auth = await requireUser(request, env.CM_KV);
+  const auth = await requireUser(request, kv);
   if (!auth) return fail('unauthorized', '请先登录', 401);
 
   const orderId = new URL(request.url).searchParams.get('orderId') || '';
   if (!orderId) return fail('invalid_request', '缺少 orderId', 400);
-
-  const kv = env.CM_KV;
   const order = await kv.get(`cm:order:${orderId}`, 'json');
   if (!order || order.uid !== auth.user.id) return fail('order_not_found', '订单不存在', 404);
 

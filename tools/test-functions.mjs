@@ -135,6 +135,25 @@ await check('缺 CM_KV → 503 backend_unavailable', async () => {
   assert.equal(body.error, 'backend_unavailable');
 });
 
+await check('CM_KV 被配成字符串（环境变量冒充绑定）→ 503 而不是 500', async () => {
+  const env = makeEnv({ CM_KV: 'cartonmarks_kv' });
+  const res = await codeEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/code', { email: 'a@b.com' }),
+    env,
+  });
+  assert.equal(res.status, 503);
+  const body = await jsonBody(res);
+  assert.equal(body.error, 'backend_unavailable');
+  assert.equal(body.hint, 'kv_binding');
+  assert.ok(body.message.includes('绑定'));
+
+  const meRes = await meEp.onRequestGet({
+    request: getRequest('https://x/api/me'),
+    env: makeEnv({ CM_KV: 'cartonmarks_kv' }),
+  });
+  assert.equal(meRes.status, 503);
+});
+
 await check('第一次发码成功，KV 里是 6 位码', async () => {
   const env = makeEnv();
   fetchHandler = async () => new Response('{"id":"ok"}', { status: 200 });

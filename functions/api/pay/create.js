@@ -6,7 +6,7 @@ import {
   fail,
   json,
   requireEnv,
-  backendUnavailable,
+  backendUnavailable, getKV, kvUnavailable,
 } from '../../../lib/api/http.js';
 import { requireUser } from '../../../lib/api/auth.js';
 import { PRICE_CENTS, makeOrderId, xorpayCreateSign } from '../../../lib/api/pay.js';
@@ -14,11 +14,12 @@ import { PRICE_CENTS, makeOrderId, xorpayCreateSign } from '../../../lib/api/pay
 const PLAN_NAME = 'Carton Mark 年订阅';
 
 export const onRequestPost = guard(async ({ request, env }) => {
-  if (!env.CM_KV) return backendUnavailable(['CM_KV']);
+  const kv = getKV(env);
+  if (!kv) return kvUnavailable();
   const missing = requireEnv(env, ['XORPAY_AID', 'XORPAY_SECRET', 'PUBLIC_BASE_URL']);
   if (missing.length) return backendUnavailable(missing);
 
-  const auth = await requireUser(request, env.CM_KV);
+  const auth = await requireUser(request, kv);
   if (!auth) return fail('unauthorized', '请先登录', 401);
 
   // 注意：这里不读取任何请求体里的价格，金额写死
@@ -69,7 +70,7 @@ export const onRequestPost = guard(async ({ request, env }) => {
     return fail('pay_unavailable', '支付通道没有返回二维码，请稍后再试', 503, { upstream: 'no_qr' });
   }
 
-  await env.CM_KV.put(
+  await kv.put(
     `cm:order:${orderId}`,
     JSON.stringify({
       uid: auth.user.id,
