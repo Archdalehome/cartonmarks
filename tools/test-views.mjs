@@ -1,6 +1,6 @@
 /**
  * tools/test-views.mjs —— 用 DOM 垫片把绘制代码真跑一遍
- * 检查：8 个面板、中文标签、尺寸标注、等轴测棱线、无运行时报错。
+ * 检查：12 个区域、中文标签、尺寸标注、等轴测棱线、无运行时报错。
  * 用法：node tools/test-views.mjs
  */
 import assert from 'node:assert/strict';
@@ -40,15 +40,34 @@ check('生成 SVG 且宽度等于容器内容宽度', () => {
   assert.ok(svg, '没有生成 svg');
   assert.equal(svg.attrs.width, '760');
 });
-check('8 个面板分组', () => assert.equal(groups.length, 8));
-check('面板 data-key 齐全', () => {
+check('12 个区域分组', () => assert.equal(groups.length, 12));
+check('只有 8 个可点击（4 箱身面 + 4 主摇盖），防尘摇盖不可点', () => {
+  const clickable = groups.filter((g) => g.attrs.role === 'button');
+  assert.equal(clickable.length, 8);
+  const locked = groups.filter((g) => g.classList.contains('is-locked'));
+  assert.equal(locked.length, 4);
+  assert.equal(clickable.filter((g) => g.attrs['data-slot'] === 'minor').length, 0);
+});
+check('区域 data-key 齐全', () => {
   const keys = groups.map((g) => g.attrs['data-panel']).sort();
   assert.deepEqual(keys, [
-    'back', 'bottomBack', 'bottomFront', 'front', 'left', 'right', 'topBack', 'topFront',
+    'back', 'bottomBack', 'bottomFront', 'bottomLeft', 'bottomRight',
+    'front', 'left', 'right', 'topBack', 'topFront', 'topLeft', 'topRight',
   ]);
 });
-check('8 个中文标签都在图上', () => {
-  const labels = ['前箱唛', '右侧箱唛', '后箱唛', '左侧箱唛', '前顶箱唛', '后顶箱唛', '前底箱唛', '后底箱唛'];
+check('主摇盖 / 防尘摇盖分组标记正确', () => {
+  const slotOf = (key) => groups.find((g) => g.attrs['data-panel'] === key).attrs['data-slot'];
+  assert.equal(slotOf('front'), 'body');
+  assert.equal(slotOf('topFront'), 'major');
+  assert.equal(slotOf('topRight'), 'minor');
+  assert.equal(slotOf('bottomLeft'), 'minor');
+});
+check('12 个中文标签都在图上', () => {
+  const labels = [
+    '前箱唛', '右侧箱唛', '后箱唛', '左侧箱唛',
+    '前顶箱唛', '右顶箱唛', '后顶箱唛', '左顶箱唛',
+    '前底箱唛', '右底箱唛', '后底箱唛', '左底箱唛',
+  ];
   for (const label of labels) assert.ok(texts.includes(label), `缺少标签：${label}`);
 });
 check('标注展开总尺寸 2,000 / 700', () => {
@@ -60,14 +79,16 @@ check('标注 L / W / H', () => {
   assert.ok(texts.includes('W 400'));
   assert.ok(texts.includes('H 300'));
 });
-check('面板尺寸标注正确（600 × 300 / 400 × 300 / 600 × 200）', () => {
-  assert.ok(texts.includes('600 × 300'), '缺少前面板尺寸');
+check('面板尺寸标注正确（600×300 / 400×300 / 600×200 / 400×200）', () => {
+  assert.ok(texts.includes('600 × 300'), '缺少箱身面尺寸');
   assert.ok(texts.includes('400 × 300'), '缺少侧面尺寸');
-  assert.ok(texts.includes('600 × 200'), '缺少摇盖尺寸');
+  assert.ok(texts.includes('600 × 200'), '缺少主摇盖尺寸');
+  assert.ok(texts.includes('400 × 200'), '缺少防尘摇盖尺寸');
 });
-check('裁切轮廓与折叠线都画了', () => {
-  assert.ok(svg.filter((n) => n.attrs.class === 'net-outline').length === 1);
-  assert.equal(svg.filter((n) => n.attrs.class === 'net-fold').length, net.folds.length);
+check('裁切轮廓 1 条、折叠线 11 条、开槽线 6 条', () => {
+  assert.equal(svg.filter((n) => n.attrs.class === 'net-outline').length, 1);
+  assert.equal(svg.filter((n) => n.attrs.class === 'net-fold').length, 11);
+  assert.equal(svg.filter((n) => n.attrs.class === 'net-cut').length, 6);
 });
 check('点击面板能回调 key', () => {
   const front = groups.find((g) => g.attrs['data-panel'] === 'front');
@@ -84,28 +105,36 @@ check('select() 只高亮一个面板', () => {
   assert.equal(groups.filter((g) => g.classList.contains('is-selected')).length, 0);
 });
 
-check('面板像素宽高比 = 真实毫米比例（前面板 2:1，摇盖 3:1，侧面 4:3）', () => {
+check('面板像素宽高比 = 真实毫米比例（前面板 2:1，主摇盖 3:1，防尘摇盖 2:1）', () => {
   const edge = (key) => groups.find((g) => g.attrs['data-panel'] === key)
     .children.find((c) => c.attrs.class === 'panel-edge');
   const front = edge('front');
-  const flap = edge('topFront');
+  const major = edge('topFront');
+  const minor = edge('topRight');
   const right = edge('right');
 
   assert.equal(Number(front.attrs.width) / Number(front.attrs.height), 2); // 600:300
-  assert.equal(Number(flap.attrs.width) / Number(flap.attrs.height), 3); // 600:200
+  assert.equal(Number(major.attrs.width) / Number(major.attrs.height), 3); // 600:200
+  assert.equal(Number(minor.attrs.width) / Number(minor.attrs.height), 2); // 400:200
   assert.ok(Math.abs(Number(right.attrs.width) / Number(right.attrs.height) - 4 / 3) < 1e-9);
 });
 
 check('整张展开图的像素宽高比 = 2000:700', () => {
   const edge = (key) => groups.find((g) => g.attrs['data-panel'] === key)
     .children.find((c) => c.attrs.class === 'panel-edge');
-  const xs = ['front', 'right', 'back', 'left'].map((k) => edge(k));
-  const widthMarks = Number(edge('front').attrs.width) + Number(edge('right').attrs.width)
-    + Number(edge('back').attrs.width) + Number(edge('left').attrs.width);
-  const heightMarks = Number(edge('topFront').attrs.height) + Number(edge('front').attrs.height)
-    + Number(edge('bottomFront').attrs.height);
+  const widthMarks = ['front', 'right', 'back', 'left']
+    .map((k) => Number(edge(k).attrs.width)).reduce((a, b) => a + b, 0);
+  const heightMarks = ['topFront', 'front', 'bottomFront']
+    .map((k) => Number(edge(k).attrs.height)).reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(widthMarks / heightMarks - 2000 / 700) < 1e-6);
-  assert.ok(xs.length === 4);
+});
+
+check('点击防尘摇盖不会触发选择回调', () => {
+  const minor = groups.find((g) => g.attrs['data-panel'] === 'topRight');
+  const before = selected.length;
+  minor.dispatch('click');
+  assert.equal(selected.length, before);
+  assert.equal(minor.attrs.tabindex, undefined);
 });
 
 console.log('等轴测渲染');
@@ -138,8 +167,7 @@ check('容器变窄时 SVG 宽度同步变化', () => {
   renderNet(narrow, net, { onSelect: () => {} });
   const root2 = narrow.children[0];
   assert.equal(root2.attrs.width, '360');
-  // 窄容器下仍必须有 8 个面板
-  assert.equal(root2.filter((n) => n.attrs['data-panel']).length, 8);
+  assert.equal(root2.filter((n) => n.attrs['data-panel']).length, 12);
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，8 个可编辑面，导出 1:1 PDF。">
+  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，12 个可编辑面（4 箱身面 + 4 主摇盖 + 4 防尘摇盖），导出 1:1 PDF。">
   <title>箱唛设计工具 · Carton Mark</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Cpath d='M8 11.5l8-4 8 4v9l-8 4-8-4z' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M8 11.5l8 4 8-4M16 15.5v9' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/main.css">
@@ -89,7 +89,7 @@
 
   <section class="card">
     <div class="card-head">
-      <h2>展开图 · 8 个可编辑面</h2>
+      <h2>展开图 · 12 个可编辑面</h2>
       <span class="card-meta" id="netMeta">—</span>
     </div>
     <div class="canvas canvas--net" id="netHost" aria-label="RSC 开槽箱展开图，点击面板可选中"></div>
@@ -102,7 +102,7 @@
 </main>
 
 <footer class="footnote">
-  虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)，摇盖高度 = W ÷ 2；内部一律按真实毫米计算，图上按容器宽度等比缩放。
+  虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，左/右先折入）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。
 </footer>
 
 <dialog id="helpDialog" class="help-dialog">
@@ -115,10 +115,10 @@
       <ol>
         <li><b>选箱型与输尺寸</b>：当前只支持「矩形箱 / RSC 开槽箱」，L 为长、W 为宽、H 为高，单位可切毫米或厘米。</li>
         <li><b>看两张图</b>：左侧等轴测轮廓看立体比例，右侧展开图看刀模布局，尺寸线随输入实时变化。</li>
-        <li><b>点面板</b>：展开图上 8 个面（前 / 右侧 / 后 / 左侧 / 前顶 / 后顶 / 前底 / 后底）均可点击高亮。</li>
+        <li><b>点面板</b>：展开图上 12 个区域均可点击高亮——4 个箱身面（前 / 右 / 后 / 左）、4 片主摇盖（前顶 / 后顶 / 前底 / 后底，L×W÷2）和 4 片防尘摇盖（右顶 / 左顶 / 右底 / 左底，W×W÷2）。防尘摇盖可在顶部开关里隐藏。</li>
         <li><b>下一步</b>：面板内的文字、图片编辑在 M2 开放，PDF 导出在 M3 开放。</li>
       </ol>
-      <p class="help-note">尺寸以毫米为准：600 × 400 × 300 的箱子，展开图为 2000 × 700 mm，前面板 600 × 300、侧面 400 × 300、摇盖 600 × 200。</p>
+      <p class="help-note">尺寸以毫米为准：600 × 400 × 300 的箱子，展开图为 2000 × 700 mm，前面板 600 × 300、侧面 400 × 300、主摇盖 600 × 200、防尘摇盖 400 × 200。</p>
       <p class="help-note">输入非法尺寸时会保留上一次有效图纸并给出提示；草稿自动保存在本机浏览器。</p>
     </div>
   </form>

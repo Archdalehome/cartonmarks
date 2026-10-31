@@ -1,5 +1,5 @@
 /**
- * net-view.js —— 展开图（8 面板）绘制
+ * net-view.js —— 展开图（12 个区域）绘制
  *
  * 输入：computeNet() 的毫米坐标结果
  * 输出：一张按容器宽度等比缩放的 SVG，面板可点击/键盘选中
@@ -18,6 +18,8 @@ const PAD_RIGHT = 58;
  * @param {HTMLElement} host
  * @param {ReturnType<import('./geometry.js').computeNet>} net
  * @param {{selected?:string|null, onSelect?:(key:string)=>void}} [opts]
+ *
+ * 12 个区域都画；防尘摇盖（minor）只画轮廓与尺寸，不可点击、不参与箱唛。
  */
 export function renderNet(host, net, opts = {}) {
   const { selected = null, onSelect = () => {} } = opts;
@@ -40,29 +42,34 @@ export function renderNet(host, net, opts = {}) {
   const Y = (mm) => oy + mm * scale;
   const center = { x: X(net.width / 2), y: Y(net.height / 2) };
 
-  /* 1. 裁切轮廓 */
+  /* 1. 裁切轮廓（整张刀模是一个矩形） */
   const d = net.outline
     .map(([px, py], i) => `${i === 0 ? 'M' : 'L'}${X(px).toFixed(2)},${Y(py).toFixed(2)}`)
     .join(' ') + ' Z';
   root.appendChild(pathEl(d, { class: 'net-outline' }));
 
-  /* 2. 8 个面板（可点击），最后画折叠线压在上面 */
+  /* 2. 12 个区域；防尘摇盖只画轮廓，不可点击 */
   const groups = new Map();
   for (const meta of PANELS) {
     const p = net.panels[meta.key];
     if (!p) continue;
 
+    const editable = meta.slot !== 'minor';
     const x = X(p.x);
     const y = Y(p.y);
     const w = p.w * scale;
     const h = p.h * scale;
 
     const g = node('g', {
-      class: 'panel',
+      class: `panel is-${p.kind}${editable ? '' : ' is-locked'}`,
       'data-panel': meta.key,
-      tabindex: '0',
-      role: 'button',
-      'aria-label': `${meta.label}，${Math.round(p.w)} × ${Math.round(p.h)} 毫米`,
+      'data-slot': p.kind,
+      'aria-label': editable
+        ? `${meta.label}，${Math.round(p.w)} × ${Math.round(p.h)} 毫米`
+        : `${meta.label}（防尘摇盖，不参与箱唛）`,
+      ...(editable
+        ? { tabindex: '0', role: 'button' }
+        : { 'aria-disabled': 'true' }),
     });
 
     g.appendChild(rectEl(x, y, w, h, { class: 'panel-bg' }));
@@ -94,26 +101,31 @@ export function renderNet(host, net, opts = {}) {
       );
     }
 
-    g.addEventListener('click', () => onSelect(meta.key));
-    g.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        ev.preventDefault();
-        onSelect(meta.key);
-      }
-    });
+    if (editable) {
+      g.addEventListener('click', () => onSelect(meta.key));
+      g.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          onSelect(meta.key);
+        }
+      });
+    }
 
     groups.set(meta.key, g);
     root.appendChild(g);
   }
 
-  /* 3. 折叠线 */
-  for (const f of net.folds) {
-    root.appendChild(
-      line(X(f.x1), Y(f.y1), X(f.x2), Y(f.y2), { class: 'net-fold' }),
-    );
+  /* 3. 开槽切断线（实线） */
+  for (const c of net.cuts) {
+    root.appendChild(line(X(c.x1), Y(c.y1), X(c.x2), Y(c.y2), { class: 'net-cut' }));
   }
 
-  /* 4. 尺寸线：总宽 / 总高 / L / W / H */
+  /* 4. 折叠线（虚线） */
+  for (const f of net.folds) {
+    root.appendChild(line(X(f.x1), Y(f.y1), X(f.x2), Y(f.y2), { class: 'net-fold' }));
+  }
+
+  /* 5. 尺寸线：总宽 / 总高 / L / W / H */
   dimLine(root, {
     a: { x: X(0), y: Y(0) },
     b: { x: X(net.width), y: Y(0) },

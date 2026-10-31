@@ -3,7 +3,7 @@
  * 职责：读取尺寸输入 → 校验 → 计算几何 → 调视图绘制 → 保存草稿
  */
 
-import { SHAPES, PANELS, PANEL_BY_KEY, EXAMPLE_DIMS, loadDraft, saveDraft } from './project.js';
+import { SHAPES, PANELS, PANEL_BY_KEY, SLOT_LABELS, EXAMPLE_DIMS, createPanels, loadDraft, saveDraft, isEditablePanel } from './project.js';
 import { computeNet } from './geometry.js';
 import { renderNet } from './net-view.js';
 import { renderIso } from './iso-view.js';
@@ -38,6 +38,7 @@ const state = {
   unit: 'mm',
   dims: { ...EXAMPLE_DIMS },
   selected: null,
+  panels: createPanels(),
 };
 
 let lastNet = null;
@@ -56,6 +57,7 @@ function init() {
     state.dims = draft.dims;
     state.unit = draft.unit;
     state.shape = draft.shape;
+    state.panels = draft.panels;
     applyUnitChrome();
     showToast('已恢复上次草稿');
   }
@@ -147,7 +149,7 @@ function onInputChanged() {
   state.dims = dims;
   // 尺寸变了，原来选中的面板尺寸也变了，但选中状态保留
   render();
-  saveDraft({ dims: state.dims, unit: state.unit, shape: state.shape });
+  persist();
 }
 
 /* ── 单位 ───────────────────────────────────────── */
@@ -175,7 +177,19 @@ function switchUnit(unit) {
   // 毫米值没变，图纸不用重画；但显示值经过取整，重新校验一遍保持一致
   const { dims } = readInputs();
   if (dims) state.dims = dims;
-  saveDraft({ dims: state.dims, unit: state.unit, shape: state.shape });
+  persist();
+}
+
+/** 统一保存：尺寸、单位、箱型、各可编辑面板的内容 */
+function persist() {
+  const ok = saveDraft({
+    dims: state.dims,
+    unit: state.unit,
+    shape: state.shape,
+    panels: state.panels,
+  });
+  if (!ok) showToast('本地存储已满，草稿未能保存（图片过大时容易出现）');
+  return ok;
 }
 
 /* ── 绘制 ───────────────────────────────────────── */
@@ -194,13 +208,20 @@ function render() {
   dom.isoMeta.textContent = `${fmt(L)} × ${fmt(W)} × ${fmt(H)} mm`;
   dom.netMeta.textContent = `按容器宽度等比缩放 · 实际 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm`;
   dom.netSize.textContent =
-    `展开尺寸 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm · ` +
-    `前面板 ${fmt(L)} × ${fmt(H)} · 侧面 ${fmt(W)} × ${fmt(H)} · 摇盖 ${fmt(L)} × ${fmt(lastNet.flap)}`;
+    `展开 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm · ` +
+    `箱身 ${fmt(L)}/${fmt(W)} × ${fmt(H)} · ` +
+    `主摇盖 ${fmt(L)} × ${fmt(lastNet.flap)} · 防尘摇盖 ${fmt(W)} × ${fmt(lastNet.flap)}`;
 
   updateSelectionInfo();
 }
 
+function panelElements(key) {
+  return (state.panels[key] && state.panels[key].elements) || [];
+}
+
 function selectPanel(key) {
+  // 防尘摇盖只画轮廓，点不动
+  if (!isEditablePanel(key)) return;
   state.selected = state.selected === key ? null : key;
   if (netApi) netApi.select(state.selected);
   updateSelectionInfo();
@@ -215,7 +236,7 @@ function updateSelectionInfo() {
   const meta = PANEL_BY_KEY[state.selected];
   const p = lastNet.panels[state.selected];
   dom.selInfo.textContent = p
-    ? `已选：${meta.label} · ${fmt(p.w)} × ${fmt(p.h)} mm（编辑功能在 M2 开放）`
+    ? `已选：${meta.label}（${SLOT_LABELS[p.kind]}）· ${fmt(p.w)} × ${fmt(p.h)} mm · 共 ${panelElements(state.selected).length} 个元素`
     : `已选：${meta.label}`;
   dom.selInfo.classList.add('is-active');
 }
@@ -239,7 +260,7 @@ function bindEvents() {
     writeInputsFromState();
     showNotice([]);
     render();
-    saveDraft({ dims: state.dims, unit: state.unit, shape: state.shape });
+    persist();
     showToast('已恢复示例尺寸 600 × 400 × 300 mm');
   });
 

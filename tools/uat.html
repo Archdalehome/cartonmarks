@@ -64,15 +64,23 @@ check('几何结果 = 2000 × 700 mm', (() => {
 })());
 
 const panels = $$('.panel');
-check('展开图有 8 个可点击面板', panels.length === 8, `实际 ${panels.length}`);
+check('展开图有 12 个区域', panels.length === 12, `实际 ${panels.length}`);
+check('其中 8 个可点击（4 箱身面 + 4 主摇盖）',
+  $$('.panel[role="button"]').length === 8 && $$('.panel[data-slot="minor"][role="button"]').length === 0,
+  `可点击 ${$$('.panel[role="button"]').length}`);
+
+const lockedMinor = $('.panel[data-panel="topRight"]');
+click(lockedMinor);
+check('点防尘摇盖不会进入编辑态（无高亮）',
+  !lockedMinor.classList.contains('is-selected') && !$('#selInfo').textContent.includes('已选'));
 
 const labels = $$('.panel-label').map((n) => n.textContent);
-const want = ['前箱唛', '右侧箱唛', '后箱唛', '左侧箱唛', '前顶箱唛', '后顶箱唛', '前底箱唛', '后底箱唛'];
-check('8 个中文标签齐全', want.every((w) => labels.includes(w)), labels.join(' / '));
+const want = ['前箱唛', '右侧箱唛', '后箱唛', '左侧箱唛', '前顶箱唛', '右顶箱唛', '后顶箱唛', '左顶箱唛', '前底箱唛', '右底箱唛', '后底箱唛', '左底箱唛'];
+check('12 个中文标签齐全', want.every((w) => labels.includes(w)), labels.join(' / '));
 
 const sizes = $$('.panel-size').map((n) => n.textContent);
-check('面板尺寸标注：600×300 / 400×300 / 600×200',
-  sizes.includes('600 × 300') && sizes.includes('400 × 300') && sizes.includes('600 × 200'),
+check('面板尺寸标注：600×300 / 400×300 / 600×200 / 400×200',
+  sizes.includes('600 × 300') && sizes.includes('400 × 300') && sizes.includes('600 × 200') && sizes.includes('400 × 200'),
   sizes.join(' / '));
 
 const dimTexts = $$('.dim-text').map((n) => n.textContent);
@@ -100,7 +108,7 @@ const dimL = doc.getElementById('dimL');
 dimL.value = '0';
 fire(dimL, 'input');
 check('输入 0 时给出错误提示', $('#errL').textContent.trim().length > 0, $('#errL').textContent);
-check('非法输入时图纸保留上一次有效结果', $$('.panel').length === 8);
+check('非法输入时图纸保留上一次有效结果', $$('.panel').length === 12);
 
 dimL.value = '';
 fire(dimL, 'input');
@@ -128,7 +136,7 @@ dimW.value = '50';
 fire(dimW, 'input');
 check('W 改 500 mm 后展开尺寸变为 2,200 × 800',
   $('#netSize').textContent.includes('2,200 × 800'), $('#netSize').textContent);
-check('尺寸变化后仍是 8 个面板', $$('.panel').length === 8);
+check('尺寸变化后仍是 12 个面板', $$('.panel').length === 12);
 
 // 恢复示例
 click(doc.getElementById('resetBtn'));
@@ -148,6 +156,10 @@ check('等轴测 SVG 已绘制，含 12 条棱线',
   Boolean(iso) && iso.querySelectorAll('.iso-edge').length === 12,
   iso ? String(iso.querySelectorAll('.iso-edge').length) : 'no svg');
 check('等轴测有 3 条隐藏背棱（虚线）', iso.querySelectorAll('.iso-edge.is-hidden').length === 3);
+
+// ── 防尘摇盖：只画轮廓，不参与箱唛 ───────────────
+check('4 片防尘摇盖都画出来但不带按钮语义',
+  $$('.panel[data-slot="minor"]').length === 4 && $$('.panel[data-slot="minor"]').every((p) => !p.getAttribute('role')));
 
 // ── 窄屏（380px）回归 ─────────────────────────────
 frame.style.display = 'none';
@@ -172,7 +184,7 @@ const netCard = m$('#netHost').closest('.card').getBoundingClientRect();
 check(`窄屏展开图 SVG 不超出卡片（svg ${Math.round(Number(netSvg.getAttribute('width')))} / 卡片 ${Math.round(netCard.width)}）`,
   Number(netSvg.getAttribute('width')) <= netCard.width + 1);
 
-check('窄屏下面板数仍为 8', m$$('.panel').length === 8);
+check('窄屏下面板数仍为 12', m$$('.panel').length === 12);
 check('窄屏下图例与说明文字不被裁出视口', (() => {
   const bar = m$('.statusbar').getBoundingClientRect();
   const foot = m$('.footnote').getBoundingClientRect();

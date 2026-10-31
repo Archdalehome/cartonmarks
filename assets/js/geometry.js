@@ -4,16 +4,19 @@
  * 输入永远是一组真实毫米尺寸 { L, W, H }，输出也是毫米坐标。
  * 视图层只负责把毫米等比映射到屏幕像素。
  *
- * RSC 展开图（8 个可编辑面）：
+ * RSC（FEFCO 0201）展开图共 12 个区域：
  *
- *        [前顶][  ][后顶][  ]        ← 上摇盖带，高 W/2（只有前/后两片）
- *        [ 前 ][右][ 后 ][左]        ← 箱身带，高 H
- *        [前底][  ][后底][  ]        ← 下摇盖带，高 W/2
+ *        [前顶][右顶][后顶][左顶]     ← 上摇盖带，高 W/2
+ *        [ 前 ][ 右 ][ 后 ][ 左 ]     ← 箱身带，高 H
+ *        [前底][右底][后底][左底]     ← 下摇盖带，高 W/2
  *
+ * 前/后箱身面挂主摇盖（major，L × W/2，两片对开拼成顶面）；
+ * 左/右箱身面挂防尘摇盖（minor，W × W/2，先折入再压主摇盖）。
  * 总宽 = 2L + 2W，总高 = H + W。
  */
 
-export const FLAP_RATIO = 0.5;
+/** 摇盖深度与箱宽的比例（标准 RSC：槽深 = W/2） */
+export const FLAP_DEPTH_RATIO = 0.5;
 
 /**
  * @param {{L:number,W:number,H:number}} dims 毫米
@@ -23,7 +26,7 @@ export function computeNet(dims) {
   const W = Number(dims.W);
   const H = Number(dims.H);
 
-  const flap = W * FLAP_RATIO; // 摇盖高度
+  const depth = W * FLAP_DEPTH_RATIO; // 摇盖深度（主摇盖与防尘摇盖相同）
   const width = 2 * L + 2 * W;
   const height = H + W;
 
@@ -34,50 +37,72 @@ export function computeNet(dims) {
   const x4 = 2 * L + 2 * W;
 
   const y0 = 0;
-  const y1 = flap;
-  const y2 = flap + H;
+  const y1 = depth;
+  const y2 = depth + H;
   const y3 = H + W;
 
   const panels = {
-    front: { x: x0, y: y1, w: L, h: H },
-    right: { x: x1, y: y1, w: W, h: H },
-    back: { x: x2, y: y1, w: L, h: H },
-    left: { x: x3, y: y1, w: W, h: H },
-    topFront: { x: x0, y: y0, w: L, h: flap },
-    topBack: { x: x2, y: y0, w: L, h: flap },
-    bottomFront: { x: x0, y: y2, w: L, h: flap },
-    bottomBack: { x: x2, y: y2, w: L, h: flap },
+    // 箱身四面
+    front: { x: x0, y: y1, w: L, h: H, kind: 'body' },
+    right: { x: x1, y: y1, w: W, h: H, kind: 'body' },
+    back: { x: x2, y: y1, w: L, h: H, kind: 'body' },
+    left: { x: x3, y: y1, w: W, h: H, kind: 'body' },
+
+    // 上摇盖：前/后为主摇盖，右/左为防尘摇盖
+    topFront: { x: x0, y: y0, w: L, h: depth, kind: 'major' },
+    topRight: { x: x1, y: y0, w: W, h: depth, kind: 'minor' },
+    topBack: { x: x2, y: y0, w: L, h: depth, kind: 'major' },
+    topLeft: { x: x3, y: y0, w: W, h: depth, kind: 'minor' },
+
+    // 下摇盖：同构
+    bottomFront: { x: x0, y: y2, w: L, h: depth, kind: 'major' },
+    bottomRight: { x: x1, y: y2, w: W, h: depth, kind: 'minor' },
+    bottomBack: { x: x2, y: y2, w: L, h: depth, kind: 'major' },
+    bottomLeft: { x: x3, y: y2, w: W, h: depth, kind: 'minor' },
   };
 
-  // 裁切线轮廓（毫米坐标，顺时针）
+  // 裁切线：12 个区域拼成完整刀模，外轮廓就是整个矩形
   const outline = [
-    [x0, y0], [x1, y0], [x1, y1], [x2, y1],
-    [x2, y0], [x3, y0], [x3, y1], [x4, y1],
-    [x4, y2], [x3, y2], [x3, y3], [x2, y3],
-    [x2, y2], [x1, y2], [x1, y3], [x0, y3],
+    [x0, y0],
+    [x4, y0],
+    [x4, y3],
+    [x0, y3],
   ];
 
-  // 折叠线：摇盖与箱身之间、箱身四面之间
-  const folds = [
-    { x1: x0, y1, x2: x1, y2: y1 }, // 前顶 / 前
-    { x1: x2, y1, x2: x3, y2: y1 }, // 后顶 / 后
-    { x1: x0, y1: y2, x2: x1, y2 }, // 前底 / 前
-    { x1: x2, y1: y2, x2: x3, y2 }, // 后底 / 后
-    { x1: x1, y1, x2: x1, y2 }, // 前 / 右
-    { x1: x2, y1, x2: x2, y2 }, // 右 / 后
-    { x1: x3, y1, x2: x3, y2 }, // 后 / 左
-  ];
+  // 折叠线：四列各有上下两条横折线（摇盖↔箱身），箱身之间三条竖折线
+  const folds = [];
+  for (const [sx, sw] of [[x0, L], [x1, W], [x2, L], [x3, W]]) {
+    folds.push({ x1: sx, y1, x2: sx + sw, y2: y1 });
+    folds.push({ x1: sx, y1: y2, x2: sx + sw, y2: y2 });
+  }
+  for (const x of [x1, x2, x3]) {
+    folds.push({ x1: x, y1, x2: x, y2 });
+  }
+
+  // 开槽（切断线）：上下摇盖带里相邻摇盖之间的竖切口
+  const cuts = [];
+  for (const x of [x1, x2, x3]) {
+    cuts.push({ x1: x, y1: y0, x2: x, y2: y1 });
+    cuts.push({ x1: x, y1: y2, x2: x, y2: y3 });
+  }
 
   return {
     shape: 'rsc',
     width,
     height,
-    flap,
+    flap: depth,
+    flapDepth: depth,
     bodyTop: y1,
     bodyBottom: y2,
     panels,
     outline,
     folds,
+    cuts,
+    groups: {
+      body: ['front', 'right', 'back', 'left'],
+      major: ['topFront', 'topBack', 'bottomFront', 'bottomBack'],
+      minor: ['topRight', 'topLeft', 'bottomRight', 'bottomLeft'],
+    },
     dims: { L, W, H },
   };
 }
