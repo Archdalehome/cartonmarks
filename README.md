@@ -122,3 +122,19 @@ element = { id, type: 'text'|'image'|'line', x, y, w, h, rotation,
 新增箱型只需要：在 `geometry.js` 里 `registerShapeGeometry('lshape', compute)`，
 返回 `{ width, height, panels: { key: { label, kind, editable, x, y, w, h } }, outline, folds, cuts, dims }`。
 页面、编辑器、拼版导出都会自动跟着新面板走，不用改 UI。
+
+## 后端 /api（M6，Pages Functions）
+
+同一仓库、同一域名，`functions/` 目录随 push 自动部署；共用逻辑在 `lib/api/`。
+契约见 [`docs/api-contract.md`](docs/api-contract.md)。
+
+- `POST /api/auth/code` 发验证码（Resend，6 位 / 10 分钟 / 60 秒冷却 / IP 与邮箱日限）
+- `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`
+- `GET /api/me` → `{ user|null, subExpiresAt }`（未登录不是 401）
+- `POST /api/pay/create`、`GET /api/pay/status`、`POST /api/pay/notify`（Xorpay，金额服务端写死 990 分）
+- `GET|POST /api/templates`、`GET|DELETE /api/templates/:id`（需登录 + 订阅未过期）
+
+环境变量：`RESEND_API_KEY`、`RESEND_FROM`、`XORPAY_AID`、`XORPAY_SECRET`、`PUBLIC_BASE_URL`；
+KV 绑定 `CM_KV`。**缺任何一项时接口返回 503 `backend_unavailable`，不会崩**。
+
+单测用内存假 KV + 假上游：`node tools/test-functions.mjs`（覆盖冷却、过期、试错上限、重复邮箱、登录锁定、会话过期、金额写死、查单幂等、回调验签、模板上限与超限）。
