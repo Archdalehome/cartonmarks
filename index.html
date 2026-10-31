@@ -67,7 +67,7 @@
     <span class="field-error" id="errL" role="alert"></span>
   </div>
 
-  <div class="field field--dim">
+  <div class="field field--dim" id="fieldW">
     <label class="label" for="dimW">宽 W</label>
     <div class="input-wrap">
       <input id="dimW" name="W" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
@@ -76,13 +76,57 @@
     <span class="field-error" id="errW" role="alert"></span>
   </div>
 
-  <div class="field field--dim">
+  <div class="field field--dim" id="fieldH">
     <label class="label" for="dimH">高 H</label>
     <div class="input-wrap">
       <input id="dimH" name="H" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
       <span class="suffix" data-unit-suffix>mm</span>
     </div>
     <span class="field-error" id="errH" role="alert"></span>
+  </div>
+
+  <div class="field field--dim" id="fieldHF" data-shape-fields="bevel lshape" hidden>
+    <label class="label" for="dimHF">高 H(前)</label>
+    <div class="input-wrap">
+      <input id="dimHF" name="Hfront" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+    <span class="field-error" id="errHF" role="alert"></span>
+  </div>
+
+  <div class="field field--dim" id="fieldHB" data-shape-fields="bevel lshape" hidden>
+    <label class="label" for="dimHB">高 H(后)</label>
+    <div class="input-wrap">
+      <input id="dimHB" name="Hback" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+    <span class="field-error" id="errHB" role="alert"></span>
+  </div>
+
+  <div class="field field--dim" id="fieldWF" data-shape-fields="lshape" hidden>
+    <label class="label" for="dimWF">深 W(前)</label>
+    <div class="input-wrap">
+      <input id="dimWF" name="Wfront" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+    <span class="field-error" id="errWF" role="alert"></span>
+  </div>
+
+  <div class="field field--dim" id="fieldWB" data-shape-fields="lshape" hidden>
+    <label class="label" for="dimWB">深 W(后)</label>
+    <div class="input-wrap">
+      <input id="dimWB" name="Wback" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+    <span class="field-error" id="errWB" role="alert"></span>
+  </div>
+
+  <div class="field field--dim" id="fieldWDerived" data-shape-fields="lshape" hidden>
+    <span class="label">总深 W（= W前 + W后）</span>
+    <div class="input-wrap">
+      <span class="derived-value" id="dimWDerived">—</span>
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
   </div>
 
   <div class="field field--actions">
@@ -108,7 +152,7 @@
 
   <section class="card">
     <div class="card-head">
-      <h2>展开图 · 12 个区域 / 8 个可编辑面</h2>
+      <h2 id="netTitle">展开图 · 12 个区域 / 8 个可编辑面</h2>
       <span class="card-meta" id="netMeta">—</span>
     </div>
     <div class="canvas canvas--net" id="netHost" aria-label="RSC 开槽箱展开图，点击可编辑面进入编辑"></div>
@@ -157,7 +201,7 @@
   </ul>
 </section>
 
-<footer class="footnote">
+<footer class="footnote" id="netFootnote">
   虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，仅结构件，不印箱唛）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。
 </footer>
 

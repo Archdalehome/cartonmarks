@@ -718,4 +718,26 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   .account-email { max-width: 96px; }
   .shape-locks { flex-wrap: wrap; }
   .service-banner { margin: 10px 14px 0; }
+}/* M8：L 形箱的派生总深（只读显示，样式跟输入框一致但不可编辑） */
+.derived-value {
+  display: flex;
+  align-items: center;
+  width: 118px;
+  height: 34px;
+  padding: 0 34px 0 10px;
+  background: #f1f5f9;
+  border: 1px dashed var(--line-2);
+  border-radius: 8px;
+  color: var(--ink-2, #334155);
+  font-variant-numeric: tabular-nums;
+}
+/* M8：编辑器里画出片内折线（L 形箱顶盖 250 / 400 两道） */
+.ed-fold-guide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed #2563eb;
+  opacity: .75;
+  pointer-events: none;
+  z-index: 1;
 }

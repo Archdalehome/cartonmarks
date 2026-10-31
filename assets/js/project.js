@@ -1,16 +1,23 @@
-﻿/**
+/**
  * project.js —— 项目数据模型
  *
  * 面板列表不在这里写死：createPanels(net) 完全按几何结果生成。
  * 为后续箱型（L 形、斜形）预留的扩展点是 geometry.registerShapeGeometry。
  */
 
-/** 可选箱型；enabled=false 的显示为「即将支持」且不可选 */
+/** 可选箱型；subscriberOnly 的箱型要在订阅后才可选（游客仍看到的入口是带锁按钮） */
 export const SHAPES = [
   { id: 'rsc', name: '矩形箱 / RSC 开槽箱', enabled: true },
-  { id: 'lshape', name: 'L 形箱', enabled: false },
-  { id: 'bevel', name: '斜形箱', enabled: false },
+  { id: 'lshape', name: 'L 形箱', enabled: true, subscriberOnly: true },
+  { id: 'bevel', name: '斜形箱', enabled: true, subscriberOnly: true },
 ];
+
+/** 某个箱型要输哪几个尺寸（L 形箱的 W 由 W前+W后 派生，不单独输入） */
+export function dimKeysFor(shape) {
+  if (shape === 'lshape') return ['L', 'Wfront', 'Wback', 'Hfront', 'Hback'];
+  if (shape === 'bevel') return ['L', 'W', 'Hfront', 'Hback'];
+  return ['L', 'W', 'H'];
+}
 
 export const SLOT_LABELS = {
   body: '箱身面',
@@ -74,10 +81,21 @@ export function parseDraft(data) {
     if (!data || typeof data !== 'object') return null;
     const dims = data.dims;
     if (!dims) return null;
-    const valid = ['L', 'W', 'H'].every(
-      (k) => Number.isFinite(Number(dims[k])) && Number(dims[k]) > 0,
-    );
-    if (!valid) return null;
+
+    const shape = SHAPES.some((s) => s.id === data.shape) ? data.shape : 'rsc';
+    const num = (k) => {
+      const n = Number(dims[k]);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+
+    // 各箱型只收自己需要的尺寸；缺任何一个就整份草稿作废
+    const wanted = dimKeysFor(shape);
+    const clean = {};
+    for (const k of wanted) {
+      const v = num(k);
+      if (v == null) return null;
+      clean[k] = v;
+    }
 
     const rawPanels = {};
     if (data.panels && typeof data.panels === 'object') {
@@ -89,9 +107,9 @@ export function parseDraft(data) {
     }
 
     return {
-      dims: { L: Number(dims.L), W: Number(dims.W), H: Number(dims.H) },
-      unit: data.unit === 'cm' ? 'cm' : 'mm',
-      shape: SHAPES.some((s) => s.id === data.shape && s.enabled) ? data.shape : 'rsc',
+      dims: clean,
+      unit: data.unit === 'cm' ? 'cm' : data.unit === 'in' ? 'in' : 'mm',
+      shape,
       panels: rawPanels,
     };
   } catch {

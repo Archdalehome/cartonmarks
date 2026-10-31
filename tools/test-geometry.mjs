@@ -1,4 +1,4 @@
-﻿/**
+/**
  * tools/test-geometry.mjs —— 几何换算的离线断言
  * 用法：node tools/test-geometry.mjs
  *
@@ -8,6 +8,8 @@
 import assert from 'node:assert/strict';
 import { computeNet, registerShapeGeometry, listShapeGeometries } from '../assets/js/geometry.js';
 import { createPanels } from '../assets/js/project.js';
+import '../assets/js/geometry-shapes.js';
+import { checkClosure, innerFolds } from './closure-check.mjs';
 
 let passed = 0;
 
@@ -183,5 +185,170 @@ check('未注册的箱型会明确报错', () => {
 });
 
 check('RSC 已在几何注册表里', () => assert.ok(listShapeGeometries().includes('rsc')));
+
+console.log('M8 斜形箱 / L 形箱');
+
+const bevelDims = { L: 600, W: 400, Hfront: 300, Hback: 450 };
+const lshapeDims = { L: 600, Hfront: 300, Hback: 450, Wfront: 250, Wback: 150 };
+const bevel = computeNet(bevelDims, 'bevel');
+const lshape = computeNet(lshapeDims, 'lshape');
+const SLOPE = Math.hypot(400, 150); // 427.2002
+
+check('斜形箱：顶部一整片 600×427.2，总高 = 300 + 427.2 + 200 = 927.2', () => {
+  assert.equal(bevel.width, 2000);
+  assert.ok(Math.abs(bevel.height - (300 + SLOPE + 200)) < 1e-9);
+  assert.equal(bevel.panels.topLid.w, 600);
+  assert.ok(Math.abs(bevel.panels.topLid.h - SLOPE) < 1e-9);
+  assert.equal(bevel.panels.topLid.w * 1, 600);
+});
+
+check('斜形箱：顶部只有一片，没有前顶/后顶两片，也没有顶部防尘摇盖', () => {
+  assert.equal(bevel.panels.topFront, undefined);
+  assert.equal(bevel.panels.topBack, undefined);
+  const topDust = Object.entries(bevel.panels).filter(
+    ([, p]) => p.kind === 'minor' && p.y + p.h <= bevel.panels.front.y + 1e-9,
+  );
+  assert.equal(topDust.length, 0);
+});
+
+check('斜形箱：左右侧面是四点梯形，前边 300、后边 450', () => {
+  const r = bevel.panels.right;
+  assert.equal(r.points.length, 4);
+  assert.equal(r.w, 400);
+  assert.equal(r.h, 450);
+  assert.equal(r.points[0][1], bevel.height - 200, '侧面底边落在下摇盖折线');
+  const frontTop = bevel.panels.front.y;
+  assert.equal(r.points[3][1], frontTop, '靠前上角在前箱身面顶边');
+  assert.equal(r.points[2][1], frontTop - 150, '靠后上角高出 150');
+});
+
+check('L 形箱：顶部一整片 600×550，总高 = 300 + 550 + 200 = 1050', () => {
+  assert.equal(lshape.width, 2000);
+  assert.equal(lshape.height, 1050);
+  assert.equal(lshape.panels.topLid.w, 600);
+  assert.equal(lshape.panels.topLid.h, 550);
+  assert.equal(lshape.panels.topLid.y, 0);
+  assert.equal(lshape.panels.front.y, 550, '前面板顶边 = 顶盖根部 = 550');
+});
+
+check('L 形箱：顶盖内两条折线距根部 250 和 400', () => {
+  const lid = lshape.panels.topLid;
+  const inner = innerFolds(lshape, lid);
+  assert.deepEqual(inner, [250, 400]);
+});
+
+check('L 形箱：W 由 W(前)+W(后) 派生 = 400，传入的 W 被忽略', () => {
+  assert.equal(lshape.dims.W, 400);
+  const withLie = computeNet({ ...lshapeDims, W: 9999 }, 'lshape');
+  assert.equal(withLie.width, 2000);
+  assert.equal(withLie.height, 1050);
+});
+
+check('L 形箱：台阶落在右侧面距前边 W(前)=250 处', () => {
+  const r = lshape.panels.right;
+  assert.equal(r.points.length, 6, '右侧面应是 6 点台阶多边形');
+  assert.equal(r.points[3][0], 850, '台阶竖线 x = L + W(前) = 850');
+  assert.equal(r.points[2][1], 400, '后段顶边在 450 高处');
+  assert.equal(r.points[4][1], 550, '前段顶边在 300 高处');
+});
+
+check('L 形箱：任一段宽度为 0 或负数直接报错', () => {
+  for (const bad of [
+    { Wfront: 0, Wback: 150 },
+    { Wfront: 250, Wback: 0 },
+    { Wfront: -10, Wback: 150 },
+  ]) {
+    assert.throws(
+      () => computeNet({ L: 600, Hfront: 300, Hback: 450, ...bad }, 'lshape'),
+      /W\(前\) 和 W\(后\) 都大于 0/,
+    );
+  }
+});
+
+check('底面：2 片主摇盖各 W/2 + 2 片侧面防尘摇盖（不可编辑、不进 PDF）', () => {
+  for (const net of [bevel, lshape]) {
+    const dust = Object.values(net.panels).filter((p) => p.kind === 'minor');
+    assert.equal(dust.length, 2);
+    for (const p of dust) assert.equal(p.editable, false);
+    const main = Object.entries(net.panels).filter(
+      ([k, p]) => p.kind === 'major' && k.startsWith('bottom'),
+    );
+    assert.equal(main.length, 2);
+    for (const [, p] of main) assert.equal(p.h, 200);
+    const editable = Object.keys(createPanels(net)).length;
+    assert.equal(editable, Object.keys(net.panels).length - 2);
+  }
+});
+
+console.log('闭合测试（折起来要盖满、不重叠）');
+
+check('斜形箱闭合：整片顶盖长度 = 剖面实长 427.2，深度正好 W', () => {
+  const r = checkClosure(bevel, 'bevel', bevelDims);
+  assert.ok(r.ok, r.errors.join('；'));
+  assert.equal(r.top.folds.length, 0, '斜顶盖中间不折');
+  assert.ok(Math.abs(r.bottom.sum - 400) < 1e-9);
+  assert.equal(r.bottom.dust, 2);
+});
+
+check('L 形箱闭合：整片顶盖 550，两条折线落段界，深度 250+0+150', () => {
+  const r = checkClosure(lshape, 'lshape', lshapeDims);
+  assert.ok(r.ok, r.errors.join('；'));
+  assert.deepEqual(r.top.folds, [250, 400]);
+  assert.ok(Math.abs(r.bottom.sum - 400) < 1e-9);
+});
+
+check('闭合测试能抓出旧的四片摇盖（回归：两片各 200 只有 400 < 427.2）', () => {
+  const oldBevel = {
+    panels: {
+      front: { editable: true, x: 0, y: 350, w: 600, h: 300 },
+      topFront: { editable: true, x: 0, y: 150, w: 600, h: 200 },
+      topBack: { editable: true, x: 1000, y: 0, w: 600, h: 200 },
+      bottomFront: { editable: true, x: 0, y: 650, w: 600, h: 200 },
+      bottomBack: { editable: true, x: 1000, y: 650, w: 600, h: 200 },
+    },
+    folds: [],
+  };
+  const r = checkClosure(oldBevel, 'bevel', bevelDims);
+  assert.equal(r.ok, false, '旧结构必须被判不合格');
+  assert.ok(r.errors.some((e) => e.includes('顶盖')), r.errors.join('；'));
+});
+
+check('闭合测试能抓出「L 形少一块竖壁」（回归：顶盖只有 400 长）', () => {
+  const noRiser = {
+    panels: {
+      front: { editable: true, x: 0, y: 550, w: 600, h: 300 },
+      topLid: { editable: true, x: 0, y: 150, w: 600, h: 400 },
+      bottomFront: { editable: true, x: 0, y: 850, w: 600, h: 200 },
+      bottomBack: { editable: true, x: 1000, y: 850, w: 600, h: 200 },
+      dustA: { editable: false, kind: 'minor', x: 600, y: 850, w: 400, h: 200 },
+      dustB: { editable: false, kind: 'minor', x: 1600, y: 850, w: 400, h: 200 },
+    },
+    folds: [{ x1: 0, y1: 300, x2: 600, y2: 300 }],
+  };
+  const r = checkClosure(noRiser, 'lshape', lshapeDims);
+  assert.equal(r.ok, false, '少竖壁必须被判不合格');
+  assert.ok(r.errors.some((e) => e.includes('盖不满')), r.errors.join('；'));
+});
+
+check('前后高度任意组合都闭合（H后 < H前 也成立）', () => {
+  for (const d of [
+    { L: 500, W: 300, Hfront: 400, Hback: 200 },
+    { L: 300, W: 200, Hfront: 100, Hback: 600 },
+    { L: 1200, W: 700, Hfront: 250, Hback: 250 },
+  ]) {
+    const n = computeNet(d, 'bevel');
+    assert.equal(n.width, 2 * d.L + 2 * d.W);
+    const r = checkClosure(n, 'bevel', d);
+    assert.ok(r.ok, r.errors.join('；'));
+  }
+  for (const d of [
+    { L: 500, Hfront: 400, Hback: 200, Wfront: 200, Wback: 150 },
+    { L: 300, Hfront: 100, Hback: 600, Wfront: 120, Wback: 180 },
+  ]) {
+    const n = computeNet(d, 'lshape');
+    const r = checkClosure(n, 'lshape', d);
+    assert.ok(r.ok, r.errors.join('；'));
+  }
+});
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

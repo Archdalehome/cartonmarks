@@ -13,9 +13,11 @@ import {
   serializeDraft,
   isEditablePanel,
   parseDraft,
+  dimKeysFor,
 } from './project.js';
 import { loadProject, saveProject, compressImage } from './storage.js';
 import { computeNet } from './geometry.js';
+import { computeIsoShape } from './geometry-shapes.js';
 import { renderNet } from './net-view.js';
 import { renderIso } from './iso-view.js';
 import { createEditor } from './editor.js';
@@ -27,20 +29,44 @@ import { initAccountUI, currentAccount, isSubscribed, openLogin, openSubscribe, 
 import { exportPdf, imageReport } from './pdf-export.js';
 import { summarize, exportFileName, MIN_DPI } from './pdf-plan.js';
 
-const NAMES = { L: '长 L', W: '宽 W', H: '高 H' };
-const DIM_KEYS = ['L', 'W', 'H'];
+/* 尺寸字段登记表：一个字段 = 一个输入框 + 一条错误提示；不同箱型按 dimKeysFor() 取用 */
+const DIM_FIELDS = {
+  L: { input: 'dimL', err: 'errL', name: '长 L' },
+  W: { input: 'dimW', err: 'errW', name: '宽 W' },
+  H: { input: 'dimH', err: 'errH', name: '高 H' },
+  Hfront: { input: 'dimHF', err: 'errHF', name: '高 H(前)' },
+  Hback: { input: 'dimHB', err: 'errHB', name: '高 H(后)' },
+  Wfront: { input: 'dimWF', err: 'errWF', name: '深 W(前)' },
+  Wback: { input: 'dimWB', err: 'errWB', name: '深 W(后)' },
+};
+const ALL_DIM_KEYS = Object.keys(DIM_FIELDS);
+const DIM_DEFAULTS = {
+  L: 600,
+  W: 400,
+  H: 300,
+  Hfront: 300,
+  Hback: 450,
+  Wfront: 250,
+  Wback: 150,
+};
 const el = (id) => document.getElementById(id);
 
 const dom = {
   shape: el('shapeSelect'),
   unitToggle: el('unitToggle'),
-  inputs: { L: el('dimL'), W: el('dimW'), H: el('dimH') },
-  errors: { L: el('errL'), W: el('errW'), H: el('errH') },
+  inputs: Object.fromEntries(ALL_DIM_KEYS.map((k) => [k, el(DIM_FIELDS[k].input)])),
+  errors: Object.fromEntries(ALL_DIM_KEYS.map((k) => [k, el(DIM_FIELDS[k].err)])),
+  dimFields: [...document.querySelectorAll('[data-shape-fields]')],
+  fieldW: el('fieldW'),
+  fieldH: el('fieldH'),
+  dimWDerived: el('dimWDerived'),
   notice: el('notice'),
   isoHost: el('isoHost'),
   netHost: el('netHost'),
   isoMeta: el('isoMeta'),
   netMeta: el('netMeta'),
+  netTitle: el('netTitle'),
+  footnote: el('netFootnote'),
   netSize: el('netSize'),
   selInfo: el('selInfo'),
   resetBtn: el('resetBtn'),
@@ -104,7 +130,7 @@ const dom = {
 const state = {
   shape: 'rsc',
   unit: 'mm',
-  dims: { ...EXAMPLE_DIMS },
+  dims: { ...DIM_DEFAULTS },
   selected: null,
   selectedElement: null,
   panels: {},
@@ -112,6 +138,9 @@ const state = {
 
 const history = new History(60);
 let lastNet = null;
+let accountReady = false;
+let pendingShape = '';
+let pendingPanel = '';
 let netApi = null;
 let renderQueued = false;
 let toastTimer = 0;
@@ -149,14 +178,28 @@ async function init() {
 
   const draft = await loadProject();
   if (draft) {
-    state.dims = draft.dims;
+    state.dims = { ...DIM_DEFAULTS, ...draft.dims };
     state.unit = draft.unit;
     state.shape = draft.shape;
     applyUnitChrome();
   }
+  updateShapeChrome();
+
+  // 深链：?shape=lshape&Hfront=350&panel=topLid 之类，便于分享与自测
+  // 订阅专属箱型要等 /api/me 回来、确认已订阅后才切（见 onAccountChanged）
+  const params = new URLSearchParams(location.search);
+  const wantedShape = params.get('shape');
+  if (wantedShape && SHAPES.some((s) => s.id === wantedShape && s.enabled)) {
+    pendingShape = wantedShape;
+  }
+  for (const k of ALL_DIM_KEYS) {
+    const raw = params.get(k);
+    if (raw != null && raw !== '') state.dims[k] = Number(raw);
+  }
 
   // 面板槽位完全由当前箱型的几何结果生成（不写死 RSC）
-  state.panels = createPanels(computeNet(state.dims, state.shape));
+  // 尺寸非法时先用兜底值出图，把错误提示留给输入框，不白屏
+  state.panels = createPanels(computeNet(safeDims(state.dims), state.shape));
   if (draft) {
     mergeDraftPanels(draft.panels);
     showToast('已恢复上次草稿');
@@ -165,6 +208,8 @@ async function init() {
   dom.shape.value = state.shape;
   writeInputsFromState();
   render();
+  const badInputs = readInputs();
+  if (badInputs.errors.length) showErrors(badInputs.errors);
   if (window.matchMedia && window.matchMedia('(max-width: 720px)').matches) {
     dom.mobileHint.hidden = false;
   }
@@ -174,11 +219,20 @@ async function init() {
   // 账号 / 订阅：首屏拉一次 /api/me，失败按游客处理，不挡使用
   bindAccountGate();
   initAccountUI({ onChange: onAccountChanged })
-    .then((acc) => onAccountChanged(acc))
-    .catch(() => onAccountChanged({ user: null, subExpiresAt: null, subscribed: false, backendDown: false }));
+    .then((acc) => {
+      accountReady = true;
+      onAccountChanged(acc);
+    })
+    .catch(() => {
+      accountReady = true;
+      onAccountChanged({ user: null, subExpiresAt: null, subscribed: false, backendDown: false });
+    });
   // 支持 ?panel=front 这类深链，方便直接打开某一面
-  const wanted = new URLSearchParams(location.search).get('panel');
-  if (wanted && isEditablePanel(lastNet, wanted)) selectPanel(wanted, { scroll: false });
+  pendingPanel = new URLSearchParams(location.search).get('panel') || '';
+  if (pendingPanel && isEditablePanel(lastNet, pendingPanel)) {
+    selectPanel(pendingPanel, { scroll: false });
+    pendingPanel = '';
+  }
 }
 
 /** 把草稿内容合并进当前几何生成的面板；几何里没有的 key 直接丢弃 */
@@ -215,11 +269,29 @@ function onAccountChanged(acc) {
   if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
   document.querySelectorAll('[data-locked-shape]').forEach((btn) => {
     const name = btn.dataset.lockedShape === 'lshape' ? 'L 形箱' : '斜形箱';
-    btn.textContent = acc.subscribed ? `${name}（M8）` : `${name} 🔒`;
+    btn.textContent = acc.subscribed ? `${name}（已解锁，请用上方箱型下拉）` : `${name} 🔒`;
   });
   if (dom.templatesBtn) {
     dom.templatesBtn.classList.toggle('is-locked', !acc.subscribed);
     dom.templatesBtn.textContent = acc.subscribed ? '模板' : '模板 🔒';
+  }
+  buildShapeSelect();
+  // 深链里带的订阅专属箱型，等 /api/me 真正返回后再切（首帧 notify 先跳过）
+  if (accountReady && pendingShape) {
+    const want = SHAPES.find((s) => s.id === pendingShape);
+    if (want && (!want.subscriberOnly || acc.subscribed)) {
+      const target = pendingShape;
+      pendingShape = '';
+      switchShape(target);
+      return;
+    }
+    pendingShape = '';
+  }
+  // 只有 /api/me 真正返回之后才按订阅状态回退，避免首帧「未知状态」误把深链箱型切走
+  const cur = SHAPES.find((s) => s.id === state.shape);
+  if (accountReady && cur?.subscriberOnly && !acc.subscribed) {
+    switchShape('rsc');
+    showToast('订阅已过期，已切回矩形箱');
   }
 }
 function buildShapeSelect() {
@@ -227,17 +299,79 @@ function buildShapeSelect() {
   for (const s of SHAPES) {
     const opt = document.createElement('option');
     opt.value = s.id;
-    opt.textContent = s.enabled ? s.name : `${s.name}（即将支持）`;
-    opt.disabled = !s.enabled;
+    const locked = s.subscriberOnly && !isSubscribed();
+    opt.textContent = !s.enabled
+      ? `${s.name}（即将支持）`
+      : locked
+        ? `${s.name}（订阅可用）`
+        : s.name;
+    opt.disabled = !s.enabled || locked;
     dom.shape.appendChild(opt);
+  }
+  dom.shape.value = state.shape;
+}
+
+/** 按当前箱型显示/隐藏尺寸字段（L 形箱的 W 只读派生，H 也不是它的输入） */
+function updateShapeChrome() {
+  const show = (node, on) => {
+    if (!node) return;
+    node.hidden = !on;
+    node.style.display = on ? '' : 'none';
+  };
+  for (const node of dom.dimFields) {
+    const list = (node.dataset.shapeFields || '').split(/\s+/);
+    show(node, list.includes(state.shape));
+  }
+  show(dom.fieldW, state.shape !== 'lshape');
+  show(dom.fieldH, state.shape === 'rsc');
+  updateDerivedW();
+}
+
+/** 换箱型：面板槽位按新几何重建，内容按同名 key 迁移过去 */
+function switchShape(id) {
+  const shape = SHAPES.find((s) => s.id === id) || SHAPES[0];
+  state.shape = shape.id;
+  document.body.dataset.shape = shape.id;
+  state.selected = null;
+  state.selectedElement = null;
+  const next = createPanels(computeNet(safeDims(state.dims), state.shape));
+  for (const [key, panel] of Object.entries(state.panels)) {
+    if (next[key] && panel && Array.isArray(panel.elements)) next[key].elements = panel.elements;
+  }
+  state.panels = next;
+  dom.shape.value = shape.id;
+  updateShapeChrome();
+  writeInputsFromState();
+  const check = readInputs();
+  if (check.errors.length) showErrors(check.errors);
+  render();
+  pushHistory();
+  persistSoon();
+  // 换箱型后补上 ?panel= 深链（面板 key 只在新箱型里存在）
+  if (pendingPanel && isEditablePanel(lastNet, pendingPanel)) {
+    const key = pendingPanel;
+    pendingPanel = '';
+    selectPanel(key, { scroll: false });
   }
 }
 
 /* ── 输入与校验 ─────────────────────────────────── */
 
 function writeInputsFromState() {
-  for (const k of DIM_KEYS) dom.inputs[k].value = String(displayValue(state.dims[k], state.unit));
-  for (const k of DIM_KEYS) dom.errors[k].textContent = '';
+  for (const k of dimKeysFor(state.shape)) {
+    const v = state.dims[k] != null ? state.dims[k] : DIM_DEFAULTS[k];
+    dom.inputs[k].value = String(displayValue(v, state.unit));
+  }
+  for (const k of ALL_DIM_KEYS) dom.errors[k].textContent = '';
+  updateDerivedW();
+}
+
+function updateDerivedW() {
+  if (!dom.dimWDerived) return;
+  const wf = Number(state.dims.Wfront) || 0;
+  const wb = Number(state.dims.Wback) || 0;
+  const sum = wf + wb;
+  dom.dimWDerived.textContent = sum > 0 ? String(displayValue(sum, state.unit)) : '—';
 }
 
 function readInputs() {
@@ -245,8 +379,8 @@ function readInputs() {
   const errors = [];
   const warns = [];
 
-  for (const k of DIM_KEYS) {
-    const r = validateDim(dom.inputs[k].value, state.unit, NAMES[k]);
+  for (const k of dimKeysFor(state.shape)) {
+    const r = validateDim(dom.inputs[k].value, state.unit, DIM_FIELDS[k].name);
     if (!r.ok) {
       errors.push({ key: k, msg: r.error });
     } else {
@@ -254,15 +388,22 @@ function readInputs() {
       if (r.warn) warns.push(r.warn);
     }
   }
+  // 没在当前箱型里的字段也留着上一次的值，切回时不用重输
+  for (const k of ALL_DIM_KEYS) if (dims[k] == null) dims[k] = state.dims[k] ?? DIM_DEFAULTS[k];
+
+  if (!errors.length && state.shape !== 'rsc' && dims.Hfront === dims.Hback) {
+    errors.push({ key: 'Hback', msg: 'H(前) 与 H(后) 相等就不是斜形/台阶形状了，请输入不同高度' });
+  }
   return { dims: errors.length ? null : dims, errors, warns };
 }
 
 function showErrors(errors) {
-  for (const k of DIM_KEYS) {
+  for (const k of ALL_DIM_KEYS) {
     dom.errors[k].textContent = '';
     dom.inputs[k].classList.remove('is-error');
   }
   for (const e of errors) {
+    if (!dom.errors[e.key]) continue;
     dom.errors[e.key].textContent = e.msg;
     dom.inputs[e.key].classList.add('is-error');
   }
@@ -297,6 +438,7 @@ function onInputChanged() {
 
   showNotice(warns);
   state.dims = dims;
+  updateDerivedW();
   render();
   pushHistory({ coalesceKey: 'dims' });
   persistSoon();
@@ -314,7 +456,7 @@ function applyUnitChrome() {
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-pressed', String(on));
   });
-  for (const k of DIM_KEYS) dom.inputs[k].step = state.unit === 'mm' ? '1' : '0.1';
+  for (const k of ALL_DIM_KEYS) dom.inputs[k].step = state.unit === 'mm' ? '1' : '0.1';
 }
 
 function switchUnit(unit) {
@@ -329,8 +471,21 @@ function switchUnit(unit) {
 
 /* ── 绘制 ───────────────────────────────────────── */
 
+/* 尺寸非法时用兜底值出图（错误提示走输入框，图纸不消失、页面不白） */
+function safeDims(dims) {
+  const out = { ...dims };
+  for (const k of ALL_DIM_KEYS) {
+    if (!(Number(out[k]) > 0)) out[k] = DIM_DEFAULTS[k];
+  }
+  if (state.shape !== 'rsc' && Number(out.Hfront) === Number(out.Hback)) {
+    out.Hback = Number(out.Hfront) + 150;
+  }
+  return out;
+}
+
 function render() {
-  lastNet = computeNet(state.dims, state.shape);
+  const dims = safeDims(state.dims);
+  lastNet = computeNet(dims, state.shape);
   clampAllElements();
 
   netApi = renderNet(dom.netHost, lastNet, {
@@ -339,15 +494,40 @@ function render() {
   });
   if (state.selected) netApi.select(state.selected);
 
-  renderIso(dom.isoHost, state.dims);
+  if (state.shape === 'rsc') renderIso(dom.isoHost, dims);
+  else {
+    try {
+      renderIso(dom.isoHost, computeIsoShape(dims, state.shape));
+    } catch {
+      dom.isoHost.replaceChildren();
+    }
+  }
 
-  const { L, W, H } = state.dims;
-  dom.isoMeta.textContent = `${fmt(L)} × ${fmt(W)} × ${fmt(H)} mm`;
+  const { L, W } = dims;
+  const hasFront = state.shape !== 'rsc';
+  const isoDims = hasFront
+    ? `${fmt(L)} × ${fmt(dims.Wfront + dims.Wback)} × ${fmt(dims.Hfront)}/${fmt(dims.Hback)} mm`
+    : `${fmt(L)} × ${fmt(W)} × ${fmt(dims.H)} mm`;
+  dom.isoMeta.textContent = isoDims;
   dom.netMeta.textContent = `按容器宽度等比缩放 · 实际 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm`;
   dom.netSize.textContent =
     `展开 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm · ` +
-    `箱身 ${fmt(L)}/${fmt(W)} × ${fmt(H)} · ` +
-    `主摇盖 ${fmt(L)} × ${fmt(lastNet.flap)} · 防尘摇盖 ${fmt(W)} × ${fmt(lastNet.flap)}（不印）`;
+    (hasFront
+      ? `箱身 ${fmt(L)} × ${fmt(lastNet.dims.W)} · 高 ${fmt(lastNet.dims.Hfront)}/${fmt(lastNet.dims.Hback)} · ` +
+        `顶盖 ${fmt(L)} × ${fmt(lastNet.panels.topLid.h)}（一整片）`
+      : `箱身 ${fmt(L)}/${fmt(W)} × ${fmt(dims.H)} · ` +
+        `主摇盖 ${fmt(L)} × ${fmt(lastNet.flap)} · 防尘摇盖 ${fmt(W)} × ${fmt(lastNet.flap)}（不印）`);
+
+  const panelCount = Object.keys(lastNet.panels).length;
+  const editableCount = Object.values(lastNet.panels).filter((p) => p.editable).length;
+  if (dom.netTitle) {
+    dom.netTitle.textContent = `展开图 · ${panelCount} 个区域 / ${editableCount} 个可编辑面`;
+  }
+  if (dom.footnote) {
+    dom.footnote.textContent = hasFront
+      ? '虚线为折叠线，实线为裁切线。顶部是从前面板翻过去的一整片单摇盖（斜形 = √(W²+ΔH²)，L 形 = W前 + |ΔH| + W后，片内折线画虚线）；底面 2 片主摇盖加 2 片侧面防尘摇盖（仅结构件，不印箱唛）；内部一律按真实毫米计算。'
+      : '虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，仅结构件，不印箱唛）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。';
+  }
 
   updateSelectionInfo();
   syncEditor();
@@ -876,7 +1056,7 @@ async function exportForTest(opts = {}) {
 /* ── 事件绑定 ───────────────────────────────────── */
 
 function bindEvents() {
-  for (const k of DIM_KEYS) {
+  for (const k of ALL_DIM_KEYS) {
     dom.inputs[k].addEventListener('input', onInputChanged);
     dom.inputs[k].addEventListener('blur', onInputChanged);
   }
@@ -887,13 +1067,13 @@ function bindEvents() {
   });
 
   dom.resetBtn.addEventListener('click', () => {
-    state.dims = { ...EXAMPLE_DIMS };
+    state.dims = { ...DIM_DEFAULTS };
     writeInputsFromState();
     showNotice([]);
     render();
     pushHistory();
     persistSoon();
-    showToast('已恢复示例尺寸 600 × 400 × 300 mm');
+    showToast('已恢复示例尺寸');
   });
 
   dom.helpBtn.addEventListener('click', () => {
@@ -910,8 +1090,12 @@ function bindEvents() {
       dom.shape.value = state.shape;
       return;
     }
-    state.shape = chosen.id;
-    persistSoon();
+    if (chosen.subscriberOnly && !isSubscribed()) {
+      dom.shape.value = state.shape;
+      openSubscribe();
+      return;
+    }
+    switchShape(chosen.id);
   });
 
   dom.undoBtn.addEventListener('click', undo);
@@ -1031,7 +1215,18 @@ function showToast(msg) {
 
 /* ── 启动 ───────────────────────────────────────── */
 
-await init();
+try {
+  await init();
+} catch (err) {
+  console.error('init failed', err);
+  document.body.dataset.initError = String((err && err.message) || err);
+  const notice = document.getElementById('notice');
+  if (notice) {
+    notice.hidden = false;
+    notice.classList.add('is-error');
+    notice.textContent = `页面初始化失败：${(err && err.message) || err}`;
+  }
+}
 
 // 便于调试与自动化检查
 window.__CM__ = {

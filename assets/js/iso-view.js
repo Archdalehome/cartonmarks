@@ -10,9 +10,11 @@ import { fmt } from './units.js';
 const PAD_X = 54;
 const PAD_Y = 38;
 
-export function renderIso(host, dims) {
+export function renderIso(host, input) {
   const cw = contentWidth(host);
-  const iso = computeIso(dims);
+  // 兼容两种入参：RSC 直接传尺寸（内部用 computeIso），新箱型传已算好的拉伸线稿
+  const iso = input && input.corners ? input : computeIso(input);
+  const dims = iso.dims || input;
   const pts = Object.values(iso.corners);
 
   const minX = Math.min(...pts.map((p) => p.x));
@@ -62,10 +64,15 @@ export function renderIso(host, dims) {
     x: (minX + maxX) / 2 * scale + ox,
     y: (minY + maxY) / 2 * scale + oy,
   };
+  const hasFront = Number.isFinite(Number(dims.Hfront));
   const dims3 = [
     { key: 'L', label: `L ${fmt(dims.L)}`, offset: 26 },
     { key: 'W', label: `W ${fmt(dims.W)}`, offset: 26 },
-    { key: 'H', label: `H ${fmt(dims.H)}`, offset: 26 },
+    {
+      key: 'H',
+      label: hasFront ? `H(前) ${fmt(dims.Hfront)}` : `H ${fmt(dims.H)}`,
+      offset: 26,
+    },
   ];
   for (const item of dims3) {
     const [a, b] = iso.anchors[item.key].map(P);

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * pdf-export.js —— 生成 1:1 箱唛 PDF
  *
  * 依赖（全部本地化在 vendor/）：
@@ -17,6 +17,7 @@ import {
   exportFileName,
   planTiles,
   MIN_DPI,
+  dimsTag,
 } from './pdf-plan.js';
 
 const LINE_HEIGHT = 1.22;
@@ -309,11 +310,11 @@ export async function exportPdf({ net, panels, dims, mode = 'sheet', tilePaper =
 
   // 元信息用 ASCII，避免部分阅读器把中文元数据弄乱
   doc.setProperties({
-    title: `Carton Mark artwork ${Math.round(dims.L)}x${Math.round(dims.W)}x${Math.round(dims.H)} mm`,
+    title: `Carton Mark artwork ${dimsTag(dims)} mm`,
     subject: `Unfolded net ${Math.round(net.width)}x${Math.round(net.height)} mm at 1:1`,
     creator: 'Carton Mark',
     author: 'Carton Mark',
-    keywords: `carton mark, ${Math.round(dims.L)}x${Math.round(dims.W)}x${Math.round(dims.H)} mm, 1:1, ${Math.round(net.width)}x${Math.round(net.height)} mm`,
+    keywords: `carton mark, ${dimsTag(dims)} mm, 1:1, ${Math.round(net.width)}x${Math.round(net.height)} mm`,
   });
 
   const lowDpi = [];

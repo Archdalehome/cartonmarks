@@ -74,6 +74,16 @@ export function createEditor({ host, callbacks }) {
     guideH.className = 'ed-guide ed-guide--h';
 
     for (const el of elements) canvas.appendChild(buildElement(el));
+
+    // 片内折线（例如 L 形箱顶盖的 250 / 400 两道折线）：只提示位置，不可编辑
+    for (const guide of geo.foldGuides || []) {
+      const fold = document.createElement('div');
+      fold.className = 'ed-fold-guide';
+      fold.style.top = `${Math.round(guide.y * scale)}px`;
+      fold.title = guide.label || '折线';
+      canvas.appendChild(fold);
+    }
+
     canvas.appendChild(guideV);
     canvas.appendChild(guideH);
 

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * pdf-plan.js —— PDF 导出的纯计算（不含 jsPDF / DOM，方便离线断言）
  *
  * 页面尺寸 = 展开图真实毫米 (2L + 2W) × (H + W)，1:1。
@@ -146,10 +146,20 @@ export function imageDpi(element, pixelWidth) {
   return inches > 0 ? pixelWidth / inches : 0;
 }
 
+/** 文件名/元信息里的尺寸串：RSC 是 L×W×H，有高差的箱型带上前后高度 */
+export function dimsTag(dims) {
+  const r = (v) => Math.round(Number(v));
+  if (dims.Hfront != null) {
+    const W = dims.W ?? Number(dims.Wfront) + Number(dims.Wback);
+    return `${r(dims.L)}x${r(W)}x${r(dims.Hfront)}-${r(dims.Hback)}`;
+  }
+  return `${r(dims.L)}x${r(dims.W)}x${r(dims.H)}`;
+}
+
 export function exportFileName(dims, now = new Date()) {
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-  return `cartonmark_${Math.round(dims.L)}x${Math.round(dims.W)}x${Math.round(dims.H)}_${stamp}.pdf`;
+  return `cartonmark_${dimsTag(dims)}_${stamp}.pdf`;
 }
 
 /** 汇总导出前的信息，供弹层展示 */

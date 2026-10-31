@@ -1,4 +1,4 @@
-﻿/**
+/**
  * net-view.js —— 展开图（12 个区域）绘制
  *
  * 输入：computeNet() 的毫米坐标结果
@@ -47,8 +47,21 @@ export function renderNet(host, net, opts = {}) {
     .join(' ') + ' Z';
   root.appendChild(pathEl(d, { class: 'net-outline' }));
 
-  /* 2. 12 个区域；防尘摇盖只画轮廓，不可点击 */
+  /* 2. 面板：矩形用 rect，非矩形（梯形/台阶）用 polygon；防尘摇盖只画轮廓，不可点击 */
   const groups = new Map();
+  const polyD = (p) => {
+    const pts = p.points || [
+      [p.x, p.y],
+      [p.x + p.w, p.y],
+      [p.x + p.w, p.y + p.h],
+      [p.x, p.y + p.h],
+    ];
+    return (
+      pts
+        .map(([px, py], i) => `${i === 0 ? 'M' : 'L'}${X(px).toFixed(2)},${Y(py).toFixed(2)}`)
+        .join(' ') + ' Z'
+    );
+  };
   for (const [metaKey, p] of Object.entries(net.panels)) {
     const meta = { key: metaKey, label: p.label, slot: p.kind };
     const editable = p.editable !== false && p.kind !== 'minor';
@@ -69,9 +82,29 @@ export function renderNet(host, net, opts = {}) {
         : { 'aria-disabled': 'true' }),
     });
 
-    g.appendChild(rectEl(x, y, w, h, { class: 'panel-bg' }));
-    g.appendChild(rectEl(x, y, w, h, { class: 'panel-hover' }));
-    g.appendChild(rectEl(x, y, w, h, { class: 'panel-edge' }));
+    // 矩形面用 rect（保持像素宽高比可校验），梯形/台阶面用 path
+    const corners = p.points || [
+      [p.x, p.y],
+      [p.x + p.w, p.y],
+      [p.x + p.w, p.y + p.h],
+      [p.x, p.y + p.h],
+    ];
+    const EPS = 1e-6;
+    const isRect =
+      corners.length === 4 &&
+      corners.every(
+        ([cx, cy]) =>
+          (Math.abs(cx - p.x) < EPS || Math.abs(cx - (p.x + p.w)) < EPS) &&
+          (Math.abs(cy - p.y) < EPS || Math.abs(cy - (p.y + p.h)) < EPS),
+      );
+    const drawPanel = (cls) =>
+      isRect
+        ? rectEl(x, y, w, h, { class: cls })
+        : pathEl(polyD(p), { class: cls });
+
+    g.appendChild(drawPanel('panel-bg'));
+    g.appendChild(drawPanel('panel-hover'));
+    g.appendChild(drawPanel('panel-edge'));
 
     const showName = w >= 54 && h >= 20;
     const showSize = w >= 88 && h >= 40;
@@ -158,7 +191,10 @@ export function renderNet(host, net, opts = {}) {
     dimLine(root, {
       a: { x: X(net.width), y: Y(net.bodyTop) },
       b: { x: X(net.width), y: Y(net.bodyBottom) },
-      label: `H ${fmt(net.dims.H)}`,
+      label:
+        net.dims.Hfront != null
+          ? `H(前) ${fmt(net.dims.Hfront)} / H(后) ${fmt(net.dims.Hback)}`
+          : `H ${fmt(net.dims.H)}`,
       offset: 26,
       center,
     });
