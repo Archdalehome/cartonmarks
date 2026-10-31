@@ -1,4 +1,4 @@
-/**
+﻿/**
  * app.js —— 页面装配与交互
  *
  * 数据流：输入（毫米）→ 几何计算 → 视图绘制；
@@ -24,6 +24,8 @@ import { renderProperties, syncNumberFields } from './properties.js';
 import { History } from './history.js';
 import { clampElement, createTextElement, createImageElement, deepCopyElement } from './elements.js';
 import { validateDim, displayValue, unitSuffix, fmt } from './units.js';
+import { exportPdf, imageReport } from './pdf-export.js';
+import { summarize, exportFileName, MIN_DPI } from './pdf-plan.js';
 
 const NAMES = { L: '长 L', W: '宽 W', H: '高 H' };
 const DIM_KEYS = ['L', 'W', 'H'];
@@ -45,6 +47,16 @@ const dom = {
   helpBtn: el('helpBtn'),
   helpDialog: el('helpDialog'),
   toast: el('toast'),
+  exportBtn: el('exportBtn'),
+  exportDialog: el('exportDialog'),
+  exportForm: el('exportForm'),
+  exportSummary: el('exportSummary'),
+  exportMode: el('exportMode'),
+  exportFileName: el('exportFileName'),
+  exportWarnings: el('exportWarnings'),
+  exportConfirmBtn: el('exportConfirmBtn'),
+  exportCancelBtn: el('exportCancelBtn'),
+  exportCloseBtn: el('exportCloseBtn'),
   undoBtn: el('undoBtn'),
   redoBtn: el('redoBtn'),
 
@@ -96,6 +108,7 @@ let toastTimer = 0;
 let saveTimer = 0;
 let lastStorage = '';
 let pendingImage = null;
+let exporting = false;
 
 /* ── 编辑器 ─────────────────────────────────────── */
 
@@ -649,6 +662,97 @@ async function persistNow() {
   lastStorage = where;
 }
 
+/* ── 导出 PDF ───────────────────────────────────── */
+
+async function openExportDialog() {
+  if (!lastNet) return;
+  dom.exportFileName.value = exportFileName(state.dims);
+  await refreshExportSummary();
+  if (typeof dom.exportDialog.showModal === 'function') dom.exportDialog.showModal();
+  else dom.exportDialog.setAttribute('open', '');
+}
+
+async function refreshExportSummary() {
+  if (!lastNet) return;
+  const mode = dom.exportMode.value === 'panel' ? 'panel' : 'sheet';
+  const stats = summarize({ net: lastNet, panels: state.panels, mode });
+  const page = stats.pageSize;
+
+  dom.exportSummary.innerHTML =
+    `页面尺寸：<b>${fmt(page.width)} × ${fmt(page.height)} mm</b>（1:1${page.scaled ? '，已缩放' : ''}）<br>` +
+    `包含内容：<b>${stats.usedPanels}</b> 个面 · <b>${stats.elementCount}</b> 个元素（${stats.imageCount} 张图片）<br>` +
+    `页数：<b>${stats.pages || 1}</b> 页`;
+
+  dom.exportWarnings.replaceChildren();
+  const warn = (text, cls = '') => {
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = text;
+    dom.exportWarnings.appendChild(div);
+  };
+
+  if (stats.elementCount === 0) {
+    warn('还没有任何箱唛内容，先加文字或图片再导出。', 'is-error');
+  }
+  if (page.scaled) {
+    warn(`展开图 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm 超过 PDF 单页上限 ${page.limit} mm，已等比缩到 ${(page.scale * 100).toFixed(1)}%，打印时需按同比例放大。`);
+  }
+  if (stats.imageCount) {
+    const rows = await imageReport(lastNet, state.panels);
+    for (const row of rows) {
+      if (row.error) warn('有一张图片解码失败，导出时会跳过。', 'is-error');
+      else if (row.dpi < MIN_DPI) {
+        warn(`${row.panelLabel} 的图片打印尺寸 ${Math.round(row.width)} × ${Math.round(row.height)} mm，有效约 ${Math.round(row.dpi)} dpi（低于 ${MIN_DPI} dpi，印刷可能发虚）。`);
+      }
+    }
+  }
+
+  dom.exportConfirmBtn.disabled = stats.elementCount === 0;
+}
+
+async function submitExport(ev) {
+  ev.preventDefault();
+  if (exporting || !lastNet) return;
+  exporting = true;
+  const btn = dom.exportConfirmBtn;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '生成中…';
+
+  try {
+    const res = await exportPdf({
+      net: lastNet,
+      panels: state.panels,
+      dims: state.dims,
+      mode: dom.exportMode.value === 'panel' ? 'panel' : 'sheet',
+      fileName: dom.exportFileName.value.trim() || undefined,
+      download: true,
+    });
+    dom.exportDialog.close();
+    showToast(`PDF 已生成：${res.pageCount} 页 · ${Math.round(res.pageSize.width)} × ${Math.round(res.pageSize.height)} mm`);
+  } catch (err) {
+    dom.exportWarnings.replaceChildren();
+    const div = document.createElement('div');
+    div.className = 'is-error';
+    div.textContent = err.message || '导出失败';
+    dom.exportWarnings.appendChild(div);
+  } finally {
+    exporting = false;
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function exportForTest(opts = {}) {
+  return exportPdf({
+    net: lastNet,
+    panels: state.panels,
+    dims: state.dims,
+    download: false,
+    ...opts,
+  });
+}
+
 /* ── 事件绑定 ───────────────────────────────────── */
 
 function bindEvents() {
@@ -692,6 +796,12 @@ function bindEvents() {
 
   dom.undoBtn.addEventListener('click', undo);
   dom.redoBtn.addEventListener('click', redo);
+
+  dom.exportBtn.addEventListener('click', openExportDialog);
+  dom.exportMode.addEventListener('change', refreshExportSummary);
+  dom.exportForm.addEventListener('submit', submitExport);
+  dom.exportCancelBtn.addEventListener('click', () => dom.exportDialog.close());
+  dom.exportCloseBtn.addEventListener('click', () => dom.exportDialog.close());
 
   dom.closeEditorBtn.addEventListener('click', closeEditor);
   dom.addTextBtn.addEventListener('click', () => openElementDialog('text'));
@@ -811,6 +921,7 @@ window.__CM__ = {
   openElementDialog,
   closeElementDialog,
   copyPanelTo,
+  exportPdf: exportForTest,
   undo,
   redo,
 };

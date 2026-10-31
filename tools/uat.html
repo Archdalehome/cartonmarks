@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -278,6 +278,60 @@ check('刷新后图片 dataURL 还在', frontAfter.some((e) => e.type === 'image
 /* ── 撤销栈深度 ≥ 20 ───────────────────────────── */
 
 check('撤销历史容量至少 20 步', cm().history && cm().history.limit >= 20, String(cm().history && cm().history.limit));
+
+/* ── M3：PDF 导出 ──────────────────────────────── */
+
+check('jsPDF / opentype 本地依赖已加载',
+  Boolean(winOf().jspdf && winOf().jspdf.jsPDF && winOf().opentype));
+
+let pdf = null;
+let pdfError = '';
+try {
+  pdf = await cm().exportPdf({ compress: false });
+} catch (err) {
+  pdfError = err.message || String(err);
+}
+
+check('生成 PDF（Blob 有内容）', Boolean(pdf) && pdf.blob.size > 5000,
+  pdfError || (pdf ? `${pdf.blob.size} bytes` : '无结果'));
+
+if (pdf) {
+  check('整张模式 = 1 页', pdf.pageCount === 1, String(pdf.pageCount));
+  check('页面尺寸 = 2000 × 700 mm（1:1）',
+    Math.abs(pdf.pageSize.width - 2000) < 0.5 && Math.abs(pdf.pageSize.height - 700) < 0.5,
+    JSON.stringify(pdf.pageSize));
+
+  const pdfText = await pdf.blob.text();
+  const mediaBox = (pdfText.match(/\/MediaBox\s*\[[^\]]*\]/) || [''])[0];
+  check('PDF MediaBox 与 2000×700 mm 换算一致（约 5669 × 1984 pt）',
+    /5669\.\d+\s+1984\.\d+/.test(mediaBox), mediaBox);
+
+  check('中文按矢量路径输出（没有文字对象 BT/Tj）',
+    !/\bBT\b/.test(pdfText) && !/\bTj\b/.test(pdfText),
+    `BT=${/\bBT\b/.test(pdfText)} Tj=${/\bTj\b/.test(pdfText)}`);
+
+  const curveCount = (pdfText.match(/\sc\s/g) || []).length;
+  check('PDF 里有大量贝塞尔路径（字形轮廓）', curveCount > 50, `曲线段 ${curveCount}`);
+
+  check('PDF 里嵌入了图片（XObject）', /\/XObject/.test(pdfText));
+
+  const pdfPanel = await cm().exportPdf({ mode: 'panel', compress: false });
+  check('每面一页模式 = 2 页（前后两面有内容）', pdfPanel.pageCount === 2, String(pdfPanel.pageCount));
+}
+
+// 空内容导出应该给出明确提示
+const savedPanels = cm().state.panels;
+const emptyPanels = {};
+for (const k of Object.keys(savedPanels)) emptyPanels[k] = { label: savedPanels[k].label, elements: [] };
+let emptyMsg = '';
+cm().state.panels = emptyPanels;
+try {
+  await cm().exportPdf({ download: false });
+} catch (err) {
+  emptyMsg = err.message || String(err);
+}
+cm().state.panels = savedPanels;
+check('没有内容时拒绝导出并提示', /还没有任何箱唛内容/.test(emptyMsg), emptyMsg);
 
 /* ── 窄屏 380px ────────────────────────────────── */
 

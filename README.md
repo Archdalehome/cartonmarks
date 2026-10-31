@@ -1,4 +1,4 @@
-# Carton Mark · 箱唛设计工具
+﻿# Carton Mark · 箱唛设计工具
 
 纯静态站点（HTML + CSS + 原生 JS，无构建步骤），Cloudflare Pages 直接发布仓库根目录。
 线上地址：https://cartonmarks.pages.dev
@@ -18,7 +18,12 @@
   - 「复制到」另一面：覆盖 / 追加，深拷贝（改副本不影响原件）
   - 撤销 / 重做 60 步（Ctrl+Z / Ctrl+Shift+Z）
   - 草稿自动保存：localStorage，写满自动落 IndexedDB
-- **M3 PDF 导出**（待做）
+- **M3 PDF 导出**（已完成）
+  - 页面尺寸 = 展开图真实毫米 (2L+2W)×(H+W)，1:1；超出 PDF 单页上限 5080 mm 时等比缩并提示
+  - 中文用 Noto Sans SC 子集 + opentype.js 转成矢量路径，PDF 不嵌字体、不会缺字
+  - 只导出箱唛内容 + 裁切/开槽/折叠线；尺寸线、辅助线、高亮框不导出
+  - 图片按元素框 1:1 放置（不重新采样），导出前提示低于 150 dpi 的图片
+  - 两种模式：整张展开图一页（默认）/ 每个有内容的面各一页；文件名带尺寸和日期
 - **M4 移动端适配 / 使用说明**（待做）
 
 ## 尺寸口径（一切以真实毫米为准）
@@ -52,6 +57,8 @@ assets/js/history.js     撤销 / 重做（60 步，连续操作合并）
 assets/js/storage.js     草稿存储（localStorage → IndexedDB 兜底）、图片压缩
 assets/js/editor.js      编辑器画布（拖动、四角缩放、辅助线）
 assets/js/properties.js  右侧属性面板
+assets/js/pdf-plan.js      PDF 页计划（纯计算，可离线断言）
+assets/js/pdf-export.js    PDF 生成（jsPDF + opentype 矢量文字）
 assets/js/app.js         页面装配与交互
 tools/serve.mjs          本地静态服务器
 tools/test-geometry.mjs  几何断言

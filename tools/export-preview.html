@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Carton Mark · 导出弹层预览</title>
+<style>
+  body { margin: 0; padding: 16px; background: #e9edf3; }
+  iframe { width: 1200px; height: 980px; border: 0; background: #fff; border-radius: 10px; box-shadow: 0 6px 24px rgba(15,23,42,.16); display: block; }
+</style>
+</head>
+<body>
+<iframe id="f" src="/tools/demo.html"></iframe>
+<script>
+const f = document.getElementById('f');
+f.addEventListener('load', () => {
+  try {
+    const d = f.contentDocument;
+    const btn = d && d.getElementById('exportBtn');
+    if (btn) setTimeout(() => btn.click(), 500);
+  } catch (err) {
+    /* 跨域时忽略 */
+  }
+});
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -23,8 +23,9 @@
   <div class="topbar-actions">
     <button type="button" class="btn btn-ghost btn-icon" id="undoBtn" title="撤销（Ctrl+Z）" aria-label="撤销" disabled>↶</button>
     <button type="button" class="btn btn-ghost btn-icon" id="redoBtn" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled>↷</button>
-    <span class="tag" id="stageTag">M2 · 编辑器</span>
+    <span class="tag" id="stageTag">M3 · PDF 导出</span>
     <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>
+    <button type="button" class="btn btn-primary" id="exportBtn">导出 PDF</button>
   </div>
 </header>
 
@@ -211,8 +212,39 @@
   </form>
 </dialog>
 
+<dialog id="exportDialog" class="element-dialog">
+  <form method="dialog" id="exportForm">
+    <div class="help-head">
+      <h2>导出 PDF</h2>
+      <button class="btn btn-ghost btn-icon" type="button" id="exportCloseBtn" aria-label="关闭">✕</button>
+    </div>
+    <div class="element-body">
+      <div class="export-summary" id="exportSummary"></div>
+      <div class="field" style="margin-top:12px">
+        <label class="label" for="exportMode">导出方式</label>
+        <select id="exportMode">
+          <option value="sheet">整张展开图（一页，1:1）</option>
+          <option value="panel">每个有内容的面各一页</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label class="label" for="exportFileName">文件名</label>
+        <input type="text" id="exportFileName" class="export-filename">
+      </div>
+      <div class="export-warnings" id="exportWarnings"></div>
+      <p class="hint">只导出箱唛内容与裁切/折线；尺寸线、辅助线、选中框不会出现在 PDF 里。</p>
+    </div>
+    <div class="help-foot">
+      <button type="button" class="btn" id="exportCancelBtn">取消</button>
+      <button type="submit" class="btn btn-primary" id="exportConfirmBtn">生成 PDF</button>
+    </div>
+  </form>
+</dialog>
+
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/opentype.min.js"></script>
 <script type="module" src="assets/js/app.js"></script>
 </body>
 </html>
