@@ -24,7 +24,13 @@
   - 只导出箱唛内容 + 裁切/开槽/折叠线；尺寸线、辅助线、高亮框不导出
   - 图片按元素框 1:1 放置（不重新采样），导出前提示低于 150 dpi 的图片
   - 两种模式：整张展开图一页（默认）/ 每个有内容的面各一页；文件名带尺寸和日期
-- **M4 移动端适配 / 使用说明**（待做）
+- **M4 收尾适配**（已完成）
+  - 超大箱 A3/A4 拼版：1:1 切块，每块带裁切角标、「第 i/N 块」和「接边：左/右/上/下」，A3 横放 420×297、A4 竖放 210×297，四周 8 mm 留白
+  - 页面里写明打印要选「实际大小 / 100%」，不要选「适合页面」
+  - 窄屏显示「精确定位请用桌面端」提示
+  - 面板列表完全由几何生成（`geometry.registerShapeGeometry`），测试里有假 L 形箱证明扩展点可用
+  - robots.txt、404.html、og/meta、PDF 元信息（ASCII Title/Subject 带尺寸）
+  - 中文字体 2.1 MB 只在导出时加载，不进首屏
 
 ## 尺寸口径（一切以真实毫米为准）
 
@@ -68,6 +74,7 @@ tools/uat.html           浏览器内自检（同源 iframe 真点击 / 真拖�
 tools/demo.html          演示数据（填一份草稿并跳到编辑器，用来看效果）
 tools/mobile-preview.html 390px 真视口预览
 tools/fetch-url.mjs      走 SOCKS5 抓线上页面（部署校验）
+README.md / robots.txt / 404.html  站点文案与搜索引擎文件
 ```
 
 ## 本地运行
@@ -101,5 +108,9 @@ element = { id, type: 'text'|'image', x, y, w, h, rotation,
             text?, fontSize?, bold?, align?, src? }
 ```
 
-元素坐标、尺寸、字号一律存毫米，显示时按缩放换算；M3 导出 PDF 直接按 1:1 使用同一份数据。
+元素坐标、尺寸、字号一律存毫米，显示时按缩放换算；PDF 导出直接按 1:1 使用同一份数据。
 防尘摇盖（topRight / topLeft / bottomRight / bottomLeft）只有几何，没有内容槽位。
+
+新增箱型只需要：在 `geometry.js` 里 `registerShapeGeometry('lshape', compute)`，
+返回 `{ width, height, panels: { key: { label, kind, editable, x, y, w, h } }, outline, folds, cuts, dims }`。
+页面、编辑器、拼版导出都会自动跟着新面板走，不用改 UI。

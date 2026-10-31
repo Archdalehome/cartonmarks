@@ -1,4 +1,4 @@
-/**
+﻿/**
  * pdf-export.js —— 生成 1:1 箱唛 PDF
  *
  * 依赖（全部本地化在 vendor/）：
@@ -15,6 +15,7 @@ import {
   collectLines,
   imageDpi,
   exportFileName,
+  planTiles,
   MIN_DPI,
 } from './pdf-plan.js';
 
@@ -170,12 +171,12 @@ function drawText(doc, font, element, dx, dy, scale) {
 
 /* ── 线 ─────────────────────────────────────────── */
 
-function strokeOutline(doc, outline, cuts, scale) {
+function strokeOutline(doc, outline, cuts, scale, dx = 0, dy = 0) {
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(CUT_WIDTH_MM);
   doc.setLineDashPattern([], 0);
 
-  const pts = outline.map(([x, y]) => [x * scale, y * scale]);
+  const pts = outline.map(([x, y]) => [x * scale + dx, y * scale + dy]);
   doc.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i += 1) doc.lineTo(pts[i][0], pts[i][1]);
   doc.lineTo(pts[0][0], pts[0][1]);
@@ -184,19 +185,19 @@ function strokeOutline(doc, outline, cuts, scale) {
   // 开槽（切断线）
   if (doc.setLineDashPattern) doc.setLineDashPattern([], 0);
   for (const cut of cuts) {
-    doc.moveTo(cut.x1 * scale, cut.y1 * scale);
-    doc.lineTo(cut.x2 * scale, cut.y2 * scale);
+    doc.moveTo(cut.x1 * scale + dx, cut.y1 * scale + dy);
+    doc.lineTo(cut.x2 * scale + dx, cut.y2 * scale + dy);
   }
   doc.stroke();
 }
 
-function strokeFolds(doc, folds, scale) {
+function strokeFolds(doc, folds, scale, dx = 0, dy = 0) {
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(FOLD_WIDTH_MM);
   if (doc.setLineDashPattern) doc.setLineDashPattern([2, 1.5], 0);
   for (const f of folds) {
-    doc.moveTo(f.x1 * scale, f.y1 * scale);
-    doc.lineTo(f.x2 * scale, f.y2 * scale);
+    doc.moveTo(f.x1 * scale + dx, f.y1 * scale + dy);
+    doc.lineTo(f.x2 * scale + dx, f.y2 * scale + dy);
   }
   doc.stroke();
   if (doc.setLineDashPattern) doc.setLineDashPattern([], 0);
@@ -242,37 +243,45 @@ function downloadBlob(blob, fileName) {  const url = URL.createObjectURL(blob);
 /**
  * @param {object} opts
  * @param {object} opts.net       computeNet 结果（毫米）
- * @param {object} opts.panels    state.panels（8 个可编辑面）
+ * @param {object} opts.panels    state.panels（可编辑面内容）
  * @param {{L:number,W:number,H:number}} opts.dims
- * @param {'sheet'|'panel'} [opts.mode]
+ * @param {'sheet'|'panel'|'tile'} [opts.mode]
+ * @param {'a3'|'a4'} [opts.tilePaper] 拼版纸张
  * @param {string} [opts.fileName]
  * @param {boolean} [opts.download]
- * @returns {Promise<{blob:Blob,fileName:string,pageCount:number,pageSize:object,scale:number,warnings:string[]}>}
+ * @param {boolean} [opts.compress]
  */
-export async function exportPdf({ net, panels, dims, mode = 'sheet', fileName, download = true, compress = true }) {
+export async function exportPdf({ net, panels, dims, mode = 'sheet', tilePaper = 'a3', fileName, download = true, compress = true }) {
   if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF 未加载');
   const { jsPDF } = window.jspdf;
 
-  const page = computePageSize(net);
-  const pages = collectPages({ net, panels, mode });
+  const tilePlan = mode === 'tile' ? planTiles(net, tilePaper) : null;
+  const page = tilePlan
+    ? { width: tilePlan.pageWidth, height: tilePlan.pageHeight, scale: 1, scaled: false }
+    : computePageSize(net);
+  const pages = tilePlan ? [] : collectPages({ net, panels, mode });
 
-  if (!pages.length || pages.every((p) => p.elements.length === 0)) {
-    throw new Error('还没有任何箱唛内容，先加一点文字或图片');
-  }
+  const hasContent = Object.values(panels).some((p) => p.elements && p.elements.length);
+  if (!hasContent) throw new Error('还没有任何箱唛内容，先加一点文字或图片');
 
   const font = await loadFont();
-  const dimsLines = collectLines(net);
+  const lines = collectLines(net);
   const warnings = [];
+
   if (page.scaled) {
     warnings.push(
       `展开图 ${Math.round(net.width)} × ${Math.round(net.height)} mm 超过 PDF 单页上限 ${page.limit} mm，已等比缩到 ${(page.scale * 100).toFixed(1)}%，打印时请按同比例放大`,
     );
   }
+  if (tilePlan && tilePlan.tiles.length > 36) {
+    warnings.push(`拼版共 ${tilePlan.tiles.length} 块，拼接会比较费工，确认尺寸是否输入过大`);
+  }
 
+  const orientation = page.width >= page.height ? 'landscape' : 'portrait';
   const doc = new jsPDF({
     unit: 'mm',
     format: [page.width, page.height],
-    orientation: page.width >= page.height ? 'landscape' : 'portrait',
+    orientation,
     compress,
     putOnlyUsedFonts: true,
   });
@@ -283,41 +292,72 @@ export async function exportPdf({ net, panels, dims, mode = 'sheet', fileName, d
     warnings.push(`页面尺寸校正：期望 ${page.width} × ${page.height} mm，实际 ${pdfW} × ${pdfH} mm`);
   }
 
+  // 元信息用 ASCII，避免部分阅读器把中文元数据弄乱
   doc.setProperties({
-    title: `箱唛 ${dims.L}×${dims.W}×${dims.H} mm`,
-    subject: 'Carton Mark 箱唛',
+    title: `Carton Mark artwork ${Math.round(dims.L)}x${Math.round(dims.W)}x${Math.round(dims.H)} mm`,
+    subject: `Unfolded net ${Math.round(net.width)}x${Math.round(net.height)} mm at 1:1`,
     creator: 'Carton Mark',
     author: 'Carton Mark',
+    keywords: `carton mark, ${Math.round(dims.L)}x${Math.round(dims.W)}x${Math.round(dims.H)} mm, 1:1, ${Math.round(net.width)}x${Math.round(net.height)} mm`,
   });
 
   const lowDpi = [];
   const name = fileName || exportFileName(dims);
+  const allElements = collectPages({ net, panels, mode: 'sheet' })[0].elements;
 
-  for (let i = 0; i < pages.length; i += 1) {
-    if (i > 0) doc.addPage([page.width, page.height], page.width >= page.height ? 'landscape' : 'portrait');
+  let drawScale = page.scale;
+  let drawDx = 0;
+  let drawDy = 0;
 
-    strokeOutline(doc, dimsLines.outline, dimsLines.cuts, page.scale);
-    strokeFolds(doc, dimsLines.folds, page.scale);
+  async function drawScene(elements) {
+    strokeOutline(doc, lines.outline, lines.cuts, drawScale, drawDx, drawDy);
+    strokeFolds(doc, lines.folds, drawScale, drawDx, drawDy);
 
-    for (const element of pages[i].elements) {
-      const dx = element.ax * page.scale;
-      const dy = element.ay * page.scale;
+    for (const element of elements) {
+      const dx = element.ax * drawScale + drawDx;
+      const dy = element.ay * drawScale + drawDy;
       if (element.type === 'text') {
-        drawText(doc, font, element, dx, dy, page.scale);
+        drawText(doc, font, element, dx, dy, drawScale);
       } else if (element.type === 'image' && element.src) {
         try {
           const info = await measureImage(element.src);
           const dpi = imageDpi({ w: element.w }, info.width);
           if (dpi < MIN_DPI) {
-            lowDpi.push(
-              `${Math.round(dpi)} dpi（${Math.round(element.w)} × ${Math.round(element.h)} mm）`,
-            );
+            lowDpi.push(`${Math.round(dpi)} dpi（${Math.round(element.w)} × ${Math.round(element.h)} mm）`);
           }
-          doc.addImage(element.src, imageFormat(element.src), dx, dy, element.w * page.scale, element.h * page.scale);
+          doc.addImage(element.src, imageFormat(element.src), dx, dy, element.w * drawScale, element.h * drawScale);
         } catch {
           warnings.push('有一张图片解码失败，已跳过');
         }
       }
+    }
+  }
+
+  if (tilePlan) {
+    for (const tile of tilePlan.tiles) {
+      if (tile.index > 1) doc.addPage([page.width, page.height], orientation);
+
+      doc.saveGraphicsState();
+      doc.rect(tile.px, tile.py, tile.w, tile.h);
+      doc.clip();
+      doc.discardPath();
+
+      drawScale = 1;
+      drawDx = -tile.x + tile.px;
+      drawDy = -tile.y + tile.py;
+      await drawScene(allElements);
+
+      doc.restoreGraphicsState();
+      drawCropMarks(doc, tile);
+      drawTileLabels(doc, font, tile, tilePlan);
+    }
+  } else {
+    for (let i = 0; i < pages.length; i += 1) {
+      if (i > 0) doc.addPage([page.width, page.height], orientation);
+      drawScale = page.scale;
+      drawDx = 0;
+      drawDy = 0;
+      await drawScene(pages[i].elements);
     }
   }
 
@@ -331,9 +371,54 @@ export async function exportPdf({ net, panels, dims, mode = 'sheet', fileName, d
   return {
     blob,
     fileName: name,
-    pageCount: pages.length,
+    pageCount: tilePlan ? tilePlan.tiles.length : pages.length,
     pageSize: { width: page.width, height: page.height },
     scale: page.scale,
+    tilePlan,
     warnings,
   };
+}
+
+/** 拼版：裁切角标（画在留白里，拼接后按角标裁切/对齐） */
+function drawCropMarks(doc, tile) {
+  const len = 4;
+  const x0 = tile.px;
+  const y0 = tile.py;
+  const x1 = tile.px + tile.w;
+  const y1 = tile.py + tile.h;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.2);
+  doc.setLineDashPattern([], 0);
+  const segs = [
+    [x0 - len, y0, x0 - 1, y0],
+    [x0, y0 - len, x0, y0 - 1],
+    [x1 + 1, y0, x1 + len, y0],
+    [x1, y0 - len, x1, y0 - 1],
+    [x0 - len, y1, x0 - 1, y1],
+    [x0, y1 + 1, x0, y1 + len],
+    [x1 + 1, y1, x1 + len, y1],
+    [x1, y1 + 1, x1, y1 + len],
+  ];
+  for (const [ax, ay, bx, by] of segs) {
+    doc.moveTo(ax, ay);
+    doc.lineTo(bx, by);
+  }
+  doc.stroke();
+}
+
+/** 拼版：块号、「接哪边」、100% 打印提示 */
+function drawTileLabels(doc, font, tile, plan) {
+  const m = plan.margin;
+  const size = 2.6;
+  const top = `第 ${tile.index}/${tile.total} 块 · 第 ${tile.row + 1} 行 第 ${tile.col + 1} 列`;
+  const edges = [
+    tile.hasLeft ? '左' : '',
+    tile.hasRight ? '右' : '',
+    tile.hasTop ? '上' : '',
+    tile.hasBottom ? '下' : '',
+  ].filter(Boolean).join('/');
+  const bottom = `接边：${edges || '无'} · 按 100% 实际大小打印 · Carton Mark`;
+
+  drawText(doc, font, { text: top, w: 400, h: size * 2, fontSize: size, align: 'left', bold: false }, tile.px, m - size * 1.9, 1);
+  drawText(doc, font, { text: bottom, w: 500, h: size * 2, fontSize: size, align: 'left', bold: false }, tile.px, tile.py + tile.h + 0.8, 1);
 }

@@ -7,13 +7,12 @@
 
 import {
   SHAPES,
-  EDITABLE_PANELS,
-  PANEL_BY_KEY,
   SLOT_LABELS,
   EXAMPLE_DIMS,
   createPanels,
   serializeDraft,
   isEditablePanel,
+  parseDraft,
 } from './project.js';
 import { loadProject, saveProject, compressImage } from './storage.js';
 import { computeNet } from './geometry.js';
@@ -47,6 +46,9 @@ const dom = {
   helpBtn: el('helpBtn'),
   helpDialog: el('helpDialog'),
   toast: el('toast'),
+  mobileHint: el('mobileHint'),
+  exportPaper: el('exportPaper'),
+  tilePaperField: el('tilePaperField'),
   exportBtn: el('exportBtn'),
   exportDialog: el('exportDialog'),
   exportForm: el('exportForm'),
@@ -97,7 +99,7 @@ const state = {
   dims: { ...EXAMPLE_DIMS },
   selected: null,
   selectedElement: null,
-  panels: createPanels(),
+  panels: {},
 };
 
 const history = new History(60);
@@ -142,20 +144,37 @@ async function init() {
     state.dims = draft.dims;
     state.unit = draft.unit;
     state.shape = draft.shape;
-    state.panels = draft.panels;
     applyUnitChrome();
+  }
+
+  // 面板槽位完全由当前箱型的几何结果生成（不写死 RSC）
+  state.panels = createPanels(computeNet(state.dims, state.shape));
+  if (draft) {
+    mergeDraftPanels(draft.panels);
     showToast('已恢复上次草稿');
   }
 
   dom.shape.value = state.shape;
   writeInputsFromState();
   render();
+  if (window.matchMedia && window.matchMedia('(max-width: 720px)').matches) {
+    dom.mobileHint.hidden = false;
+  }
   history.reset(snapshot());
   updateHistoryButtons();
 
   // 支持 ?panel=front 这类深链，方便直接打开某一面
   const wanted = new URLSearchParams(location.search).get('panel');
-  if (wanted && isEditablePanel(wanted)) selectPanel(wanted, { scroll: false });
+  if (wanted && isEditablePanel(lastNet, wanted)) selectPanel(wanted, { scroll: false });
+}
+
+/** 把草稿内容合并进当前几何生成的面板；几何里没有的 key 直接丢弃 */
+function mergeDraftPanels(rawPanels) {
+  if (!rawPanels) return;
+  for (const [key, value] of Object.entries(rawPanels)) {
+    if (!state.panels[key] || !value || !Array.isArray(value.elements)) continue;
+    state.panels[key].elements = value.elements;
+  }
 }
 
 function buildShapeSelect() {
@@ -266,7 +285,7 @@ function switchUnit(unit) {
 /* ── 绘制 ───────────────────────────────────────── */
 
 function render() {
-  lastNet = computeNet(state.dims);
+  lastNet = computeNet(state.dims, state.shape);
   clampAllElements();
 
   netApi = renderNet(dom.netHost, lastNet, {
@@ -291,10 +310,9 @@ function render() {
 
 function clampAllElements() {
   if (!lastNet) return;
-  for (const p of EDITABLE_PANELS) {
-    const geo = lastNet.panels[p.key];
-    const list = state.panels[p.key] ? state.panels[p.key].elements : [];
-    for (const element of list) clampElement(element, geo.w, geo.h);
+  for (const [key, geo] of Object.entries(lastNet.panels)) {
+    if (!state.panels[key]) continue;
+    for (const element of state.panels[key].elements) clampElement(element, geo.w, geo.h);
   }
 }
 
@@ -304,8 +322,8 @@ function syncEditor() {
     editor.destroy();
     return;
   }
-  const meta = PANEL_BY_KEY[state.selected];
   const geo = lastNet.panels[state.selected];
+  const meta = geo;
   dom.editorCard.hidden = false;
   dom.editorTitle.textContent = meta.label;
   dom.editorSub.textContent = `${SLOT_LABELS[meta.slot]} · ${fmt(geo.w)} × ${fmt(geo.h)} mm`;
@@ -315,7 +333,9 @@ function syncEditor() {
 }
 
 function fillCopyTargets() {
-  const options = EDITABLE_PANELS.filter((p) => p.key !== state.selected);
+  const options = Object.entries(lastNet.panels)
+    .filter(([key, p]) => p.editable && key !== state.selected)
+    .map(([key, p]) => ({ key, label: p.label }));
   dom.copyTarget.replaceChildren(
     ...options.map((p) => {
       const opt = document.createElement('option');
@@ -328,7 +348,7 @@ function fillCopyTargets() {
 
 function renderProps() {
   if (!state.selected) return;
-  const meta = PANEL_BY_KEY[state.selected];
+  const meta = lastNet.panels[state.selected];
   renderProperties(dom.propsPanel, {
     panelKey: state.selected,
     panelMeta: meta,
@@ -349,7 +369,7 @@ function renderProps() {
 
 function selectPanel(key, { scroll = true } = {}) {
   // 防尘摇盖只画轮廓，点不动
-  if (!isEditablePanel(key)) return;
+  if (!isEditablePanel(lastNet, key)) return;
   state.selected = key;
   state.selectedElement = null;
   netApi?.select(key);
@@ -373,8 +393,8 @@ function updateSelectionInfo() {
     dom.selInfo.classList.remove('is-active');
     return;
   }
-  const meta = PANEL_BY_KEY[state.selected];
   const p = lastNet.panels[state.selected];
+  const meta = p;
   const count = state.panels[state.selected].elements.length;
   dom.selInfo.textContent = `正在编辑：${meta.label}（${SLOT_LABELS[p.kind]}）· ${fmt(p.w)} × ${fmt(p.h)} mm · ${count} 个元素`;
   dom.selInfo.classList.add('is-active');
@@ -485,7 +505,7 @@ function copyPanelTo(mode) {
   pushHistory();
   persistSoon();
   showToast(
-    `已${mode === 'overwrite' ? '覆盖' : '追加'} ${copies.length} 个元素到「${PANEL_BY_KEY[target].label}」`,
+    `已${mode === 'overwrite' ? '覆盖' : '追加'} ${copies.length} 个元素到「${lastNet.panels[target].label}」`,
   );
 }
 
@@ -674,14 +694,19 @@ async function openExportDialog() {
 
 async function refreshExportSummary() {
   if (!lastNet) return;
-  const mode = dom.exportMode.value === 'panel' ? 'panel' : 'sheet';
-  const stats = summarize({ net: lastNet, panels: state.panels, mode });
+  const mode = dom.exportMode.value === 'panel' ? 'panel' : dom.exportMode.value === 'tile' ? 'tile' : 'sheet';
+  const tilePaper = dom.exportPaper.value === 'a4' ? 'a4' : 'a3';
+  dom.tilePaperField.hidden = mode !== 'tile';
+  const stats = summarize({ net: lastNet, panels: state.panels, mode, tilePaper });
   const page = stats.pageSize;
 
   dom.exportSummary.innerHTML =
     `页面尺寸：<b>${fmt(page.width)} × ${fmt(page.height)} mm</b>（1:1${page.scaled ? '，已缩放' : ''}）<br>` +
     `包含内容：<b>${stats.usedPanels}</b> 个面 · <b>${stats.elementCount}</b> 个元素（${stats.imageCount} 张图片）<br>` +
-    `页数：<b>${stats.pages || 1}</b> 页`;
+    `页数：<b>${stats.pages || 1}</b> 页` +
+    (stats.tilePlan
+      ? `<br>拼版：<b>${stats.tilePlan.paperName} · ${stats.tilePlan.cols} 列 × ${stats.tilePlan.rows} 行 = ${stats.tilePlan.tiles.length} 块</b>（1:1，不缩放）`
+      : '');
 
   dom.exportWarnings.replaceChildren();
   const warn = (text, cls = '') => {
@@ -693,6 +718,9 @@ async function refreshExportSummary() {
 
   if (stats.elementCount === 0) {
     warn('还没有任何箱唛内容，先加文字或图片再导出。', 'is-error');
+  }
+  if (stats.tilePlan) {
+    warn(`拼版共 ${stats.tilePlan.tiles.length} 块，每块边角有裁切标记，块上标了「接边」方向；拼接后即为 1:1 整图。`);
   }
   if (page.scaled) {
     warn(`展开图 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm 超过 PDF 单页上限 ${page.limit} mm，已等比缩到 ${(page.scale * 100).toFixed(1)}%，打印时需按同比例放大。`);
@@ -724,7 +752,8 @@ async function submitExport(ev) {
       net: lastNet,
       panels: state.panels,
       dims: state.dims,
-      mode: dom.exportMode.value === 'panel' ? 'panel' : 'sheet',
+      mode: dom.exportMode.value === 'panel' ? 'panel' : dom.exportMode.value === 'tile' ? 'tile' : 'sheet',
+      tilePaper: dom.exportPaper.value === 'a4' ? 'a4' : 'a3',
       fileName: dom.exportFileName.value.trim() || undefined,
       download: true,
     });
@@ -799,6 +828,7 @@ function bindEvents() {
 
   dom.exportBtn.addEventListener('click', openExportDialog);
   dom.exportMode.addEventListener('change', refreshExportSummary);
+  dom.exportPaper.addEventListener('change', refreshExportSummary);
   dom.exportForm.addEventListener('submit', submitExport);
   dom.exportCancelBtn.addEventListener('click', () => dom.exportDialog.close());
   dom.exportCloseBtn.addEventListener('click', () => dom.exportDialog.close());

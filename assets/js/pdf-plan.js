@@ -1,4 +1,4 @@
-/**
+﻿/**
  * pdf-plan.js —— PDF 导出的纯计算（不含 jsPDF / DOM，方便离线断言）
  *
  * 页面尺寸 = 展开图真实毫米 (2L + 2W) × (H + W)，1:1。
@@ -8,10 +8,79 @@
 export const PDF_MAX_MM = 5080;
 export const MIN_DPI = 150;
 
-export const EXPORT_MODES = {
-  sheet: '整张展开图（一页）',
-  panel: '每个有内容的面各一页',
+/** A4 / A3 纸张（毫米，竖放） */
+export const PAPER_SIZES = {
+  a4: { id: 'a4', name: 'A4', width: 210, height: 297 },
+  a3: { id: 'a3', name: 'A3', width: 297, height: 420 },
 };
+
+/** 拼版时四周留白（放裁切标记和「接哪边」提示） */
+export const TILE_MARGIN_MM = 8;
+
+export const EXPORT_MODES = {
+  sheet: '整张展开图（一页，1:1）',
+  panel: '每个有内容的面各一页',
+  tile: 'A3/A4 拼版（1:1，多张拼接）',
+};
+
+/**
+ * 把展开图按纸张切成若干块，1:1 不缩放。
+ * 每块给出：覆盖的展开图区域、纸张上的落点、以及上下左右是否有邻块。
+ */
+export function planTiles(net, paperId = 'a3') {
+  const paper = PAPER_SIZES[paperId] || PAPER_SIZES.a3;
+  // 让纸张朝向尽量贴合展开图
+  const portrait = { w: paper.width, h: paper.height };
+  const landscape = { w: paper.height, h: paper.width };
+  const useLandscape = net.width / net.height > portrait.w / portrait.h;
+  const page = useLandscape ? landscape : portrait;
+
+  const usableW = page.w - TILE_MARGIN_MM * 2;
+  const usableH = page.h - TILE_MARGIN_MM * 2;
+  const cols = Math.max(1, Math.ceil(net.width / usableW));
+  const rows = Math.max(1, Math.ceil(net.height / usableH));
+
+  const tiles = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const x = col * usableW;
+      const y = row * usableH;
+      tiles.push({
+        row,
+        col,
+        index: row * cols + col + 1,
+        total: rows * cols,
+        // 这一块覆盖的展开图区域（毫米）
+        x,
+        y,
+        w: Math.min(usableW, net.width - x),
+        h: Math.min(usableH, net.height - y),
+        // 纸面落点
+        px: TILE_MARGIN_MM,
+        py: TILE_MARGIN_MM,
+        hasLeft: col > 0,
+        hasRight: col < cols - 1,
+        hasTop: row > 0,
+        hasBottom: row < rows - 1,
+        rows,
+        cols,
+      });
+    }
+  }
+
+  return {
+    paper: paper.id,
+    paperName: paper.name,
+    pageWidth: page.w,
+    pageHeight: page.h,
+    usableW,
+    usableH,
+    margin: TILE_MARGIN_MM,
+    rows,
+    cols,
+    tiles,
+  };
+}
 
 /**
  * @param {{width:number,height:number}} net
@@ -84,9 +153,10 @@ export function exportFileName(dims, now = new Date()) {
 }
 
 /** 汇总导出前的信息，供弹层展示 */
-export function summarize({ net, panels, mode = 'sheet' }) {
-  const page = computePageSize(net);
-  const pages = collectPages({ net, panels, mode });
+export function summarize({ net, panels, mode = 'sheet', tilePaper = 'a3' }) {
+  const tilePlan = mode === 'tile' ? planTiles(net, tilePaper) : null;
+  const page = tilePlan ? { width: tilePlan.pageWidth, height: tilePlan.pageHeight } : computePageSize(net);
+  const pages = mode === 'tile' ? [] : collectPages({ net, panels, mode });
   const keys = Object.keys(panels);
   const usedPanels = keys.filter((k) => panels[k].elements.length);
   const elementCount = keys.reduce((n, k) => n + panels[k].elements.length, 0);
@@ -96,7 +166,8 @@ export function summarize({ net, panels, mode = 'sheet' }) {
   );
   return {
     pageSize: page,
-    pages: pages.length,
+    pages: tilePlan ? tilePlan.tiles.length : pages.length,
+    tilePlan,
     usedPanels: usedPanels.length,
     elementCount,
     imageCount,

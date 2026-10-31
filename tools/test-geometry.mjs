@@ -1,4 +1,4 @@
-/**
+﻿/**
  * tools/test-geometry.mjs —— 几何换算的离线断言
  * 用法：node tools/test-geometry.mjs
  *
@@ -6,9 +6,22 @@
  * 12 个区域：4 箱身面 + 4 主摇盖（L×W/2）+ 4 防尘摇盖（W×W/2）。
  */
 import assert from 'node:assert/strict';
-import { computeNet } from '../assets/js/geometry.js';
+import { computeNet, registerShapeGeometry, listShapeGeometries } from '../assets/js/geometry.js';
+import { createPanels } from '../assets/js/project.js';
 
 let passed = 0;
+
+function assertPanel(net, key, x, y, w, h, kind) {
+  const p = net.panels[key];
+  assert.ok(p, '缺少面板 ' + key);
+  assert.equal(p.x, x);
+  assert.equal(p.y, y);
+  assert.equal(p.w, w);
+  assert.equal(p.h, h);
+  assert.equal(p.kind, kind);
+  assert.ok(typeof p.label === 'string' && p.label.length > 0, key + ' 缺少中文标签');
+  assert.equal(p.editable, kind !== 'minor', key + ' 可编辑标记不对');
+}
 
 function check(name, fn) {
   try {
@@ -31,9 +44,10 @@ check('展开图总高 = H + W = 700', () => assert.equal(net.height, 700));
 check('摇盖深度 = W / 2 = 200', () => assert.equal(net.flap, 200));
 check('区域数量 = 12（4 箱身 + 4 主摇盖 + 4 防尘摇盖）', () => {
   assert.equal(Object.keys(net.panels).length, 12);
-  assert.equal(net.groups.body.length, 4);
-  assert.equal(net.groups.major.length, 4);
-  assert.equal(net.groups.minor.length, 4);
+  const kinds = Object.values(net.panels).map((p) => p.kind);
+  assert.equal(kinds.filter((k) => k === 'body').length, 4);
+  assert.equal(kinds.filter((k) => k === 'major').length, 4);
+  assert.equal(kinds.filter((k) => k === 'minor').length, 4);
 });
 
 check('每个区域都带 kind 分类', () => {
@@ -43,24 +57,24 @@ check('每个区域都带 kind 分类', () => {
 });
 
 check('箱身四面：前 600×300 / 右 400×300 / 后 600×300 / 左 400×300', () => {
-  assert.deepEqual(net.panels.front, { x: 0, y: 200, w: 600, h: 300, kind: 'body' });
-  assert.deepEqual(net.panels.right, { x: 600, y: 200, w: 400, h: 300, kind: 'body' });
-  assert.deepEqual(net.panels.back, { x: 1000, y: 200, w: 600, h: 300, kind: 'body' });
-  assert.deepEqual(net.panels.left, { x: 1600, y: 200, w: 400, h: 300, kind: 'body' });
+  assertPanel(net, 'front', 0, 200, 600, 300, 'body');
+  assertPanel(net, 'right', 600, 200, 400, 300, 'body');
+  assertPanel(net, 'back', 1000, 200, 600, 300, 'body');
+  assertPanel(net, 'left', 1600, 200, 400, 300, 'body');
 });
 
 check('4 片主摇盖 = L × W/2 = 600 × 200（挂在前/后箱身面）', () => {
-  assert.deepEqual(net.panels.topFront, { x: 0, y: 0, w: 600, h: 200, kind: 'major' });
-  assert.deepEqual(net.panels.topBack, { x: 1000, y: 0, w: 600, h: 200, kind: 'major' });
-  assert.deepEqual(net.panels.bottomFront, { x: 0, y: 500, w: 600, h: 200, kind: 'major' });
-  assert.deepEqual(net.panels.bottomBack, { x: 1000, y: 500, w: 600, h: 200, kind: 'major' });
+  assertPanel(net, 'topFront', 0, 0, 600, 200, 'major');
+  assertPanel(net, 'topBack', 1000, 0, 600, 200, 'major');
+  assertPanel(net, 'bottomFront', 0, 500, 600, 200, 'major');
+  assertPanel(net, 'bottomBack', 1000, 500, 600, 200, 'major');
 });
 
 check('4 片防尘摇盖 = W × W/2 = 400 × 200（挂在左/右箱身面）', () => {
-  assert.deepEqual(net.panels.topRight, { x: 600, y: 0, w: 400, h: 200, kind: 'minor' });
-  assert.deepEqual(net.panels.topLeft, { x: 1600, y: 0, w: 400, h: 200, kind: 'minor' });
-  assert.deepEqual(net.panels.bottomRight, { x: 600, y: 500, w: 400, h: 200, kind: 'minor' });
-  assert.deepEqual(net.panels.bottomLeft, { x: 1600, y: 500, w: 400, h: 200, kind: 'minor' });
+  assertPanel(net, 'topRight', 600, 0, 400, 200, 'minor');
+  assertPanel(net, 'topLeft', 1600, 0, 400, 200, 'minor');
+  assertPanel(net, 'bottomRight', 600, 500, 400, 200, 'minor');
+  assertPanel(net, 'bottomLeft', 1600, 500, 400, 200, 'minor');
 });
 
 check('上排四片摇盖严丝合缝拼满整行', () => {
@@ -129,5 +143,45 @@ check('任意尺寸都保持 2L+2W × (H+W)，摇盖深 = W/2', () => {
     assert.equal(n.panels.topRight.w, d.W);
   }
 });
+
+console.log('箱型扩展点');
+
+registerShapeGeometry('fake-l', (dims, id) => ({
+  shape: id,
+  shapeName: '假 L 形箱（测试用）',
+  width: 500,
+  height: 300,
+  bodyTop: 0,
+  bodyBottom: 200,
+  panels: {
+    panelA: { label: 'A 面', kind: 'body', slot: 'body', editable: true, x: 0, y: 0, w: 300, h: 200 },
+    panelB: { label: 'B 面', kind: 'body', slot: 'body', editable: true, x: 300, y: 0, w: 200, h: 100 },
+    waste: { label: '废料区', kind: 'minor', slot: 'minor', editable: false, x: 0, y: 200, w: 300, h: 100 },
+  },
+  outline: [[0, 0], [500, 0], [500, 300], [0, 300]],
+  folds: [],
+  cuts: [],
+  dims,
+}));
+
+check('假箱型能注册并被 computeNet 调用', () => {
+  const n = computeNet({ L: 10, W: 10, H: 10 }, 'fake-l');
+  assert.equal(n.shape, 'fake-l');
+  assert.deepEqual(Object.keys(n.panels), ['panelA', 'panelB', 'waste']);
+  assert.equal(n.width, 500);
+});
+
+check('面板槽位由几何生成：只有 editable 面进 createPanels', () => {
+  const n = computeNet({ L: 10, W: 10, H: 10 }, 'fake-l');
+  const panels = createPanels(n);
+  assert.deepEqual(Object.keys(panels).sort(), ['panelA', 'panelB']);
+  assert.equal(panels.panelA.label, 'A 面');
+});
+
+check('未注册的箱型会明确报错', () => {
+  assert.throws(() => computeNet({ L: 1, W: 1, H: 1 }, 'nope'), /未注册/);
+});
+
+check('RSC 已在几何注册表里', () => assert.ok(listShapeGeometries().includes('rsc')));
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

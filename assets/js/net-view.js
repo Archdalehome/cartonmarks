@@ -1,4 +1,4 @@
-/**
+﻿/**
  * net-view.js —— 展开图（12 个区域）绘制
  *
  * 输入：computeNet() 的毫米坐标结果
@@ -6,7 +6,6 @@
  */
 
 import { svgEl, node, ensureDefs, line, rectEl, textEl, pathEl, dimLine, contentWidth } from './svg.js';
-import { PANELS } from './project.js';
 import { fmt } from './units.js';
 
 const PAD_TOP = 56;
@@ -50,11 +49,9 @@ export function renderNet(host, net, opts = {}) {
 
   /* 2. 12 个区域；防尘摇盖只画轮廓，不可点击 */
   const groups = new Map();
-  for (const meta of PANELS) {
-    const p = net.panels[meta.key];
-    if (!p) continue;
-
-    const editable = meta.slot !== 'minor';
+  for (const [metaKey, p] of Object.entries(net.panels)) {
+    const meta = { key: metaKey, label: p.label, slot: p.kind };
+    const editable = p.editable !== false && p.kind !== 'minor';
     const x = X(p.x);
     const y = Y(p.y);
     const w = p.w * scale;
@@ -62,7 +59,7 @@ export function renderNet(host, net, opts = {}) {
 
     const g = node('g', {
       class: `panel is-${p.kind}${editable ? '' : ' is-locked'}`,
-      'data-panel': meta.key,
+      'data-panel': metaKey,
       'data-slot': p.kind,
       'aria-label': editable
         ? `${meta.label}，${Math.round(p.w)} × ${Math.round(p.h)} 毫米`

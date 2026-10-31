@@ -1,4 +1,4 @@
-/**
+﻿/**
  * tools/test-pdf-plan.mjs —— PDF 页计划的离线断言
  * 用法：node tools/test-pdf-plan.mjs
  */
@@ -11,6 +11,7 @@ import {
   imageDpi,
   exportFileName,
   summarize,
+  planTiles,
   PDF_MAX_MM,
 } from '../assets/js/pdf-plan.js';
 
@@ -130,6 +131,57 @@ check('summarize 统计正确', () => {
   assert.equal(s.elementCount, 2);
   assert.equal(s.imageCount, 1);
   assert.equal(s.pageSize.width, 2000);
+});
+
+console.log('A3/A4 拼版');
+
+check('2000×700 用 A3：横放 420×297，可用 404×281，5 列 × 3 行 = 15 块', () => {
+  const plan = planTiles(net, 'a3');
+  assert.equal(plan.pageWidth, 420);
+  assert.equal(plan.pageHeight, 297);
+  assert.equal(plan.cols, 5);
+  assert.equal(plan.rows, 3);
+  assert.equal(plan.tiles.length, 15);
+});
+
+check('拼版 1:1：所有块拼起来正好盖满展开图，且不超出可用区域', () => {
+  const plan = planTiles(net, 'a3');
+  const maxX = Math.max(...plan.tiles.map((t) => t.x + t.w));
+  const maxY = Math.max(...plan.tiles.map((t) => t.y + t.h));
+  assert.ok(Math.abs(maxX - net.width) < 1e-6, `maxX=${maxX}`);
+  assert.ok(Math.abs(maxY - net.height) < 1e-6, `maxY=${maxY}`);
+  for (const tile of plan.tiles) {
+    assert.ok(tile.w <= plan.usableW + 1e-9);
+    assert.ok(tile.h <= plan.usableH + 1e-9);
+    assert.ok(tile.w > 0 && tile.h > 0);
+  }
+});
+
+check('四角块的「接边」方向正确', () => {
+  const plan = planTiles(net, 'a3');
+  const first = plan.tiles[0];
+  const last = plan.tiles[plan.tiles.length - 1];
+  assert.equal(first.hasLeft, false);
+  assert.equal(first.hasTop, false);
+  assert.equal(first.hasRight, true);
+  assert.equal(first.hasBottom, true);
+  assert.equal(last.hasLeft, true);
+  assert.equal(last.hasTop, true);
+  assert.equal(last.hasRight, false);
+  assert.equal(last.hasBottom, false);
+});
+
+check('A4 拼版块数更多，且纸张名正确', () => {
+  const a4 = planTiles(net, 'a4');
+  assert.ok(a4.tiles.length > planTiles(net, 'a3').tiles.length);
+  assert.equal(a4.paperName, 'A4');
+});
+
+check('summarize 支持拼版模式', () => {
+  const s = summarize({ net, panels, mode: 'tile', tilePaper: 'a3' });
+  assert.equal(s.pages, 15);
+  assert.equal(s.pageSize.width, 420);
+  assert.ok(s.tilePlan && s.tilePlan.tiles.length === 15);
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

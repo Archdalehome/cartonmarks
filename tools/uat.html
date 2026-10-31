@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -275,6 +275,23 @@ check('刷新后文字内容一致',
   && backAfter.find((e) => e.type === 'text').text === '改过的副本');
 check('刷新后图片 dataURL 还在', frontAfter.some((e) => e.type === 'image' && e.src.startsWith('data:image/')));
 
+/* ── M4：首屏性能与页面文案 ─────────────────────── */
+
+const fontBefore = winOf().performance.getEntriesByType('resource').some((e) => /carton-sans\.ttf/.test(e.name));
+check('首屏不加载 2.1MB 中文字体（导出时才懒加载）', !fontBefore);
+
+const printNote = docOf().getElementById('printNote');
+check('页面里写明了打印要选「实际大小 / 100%」',
+  Boolean(printNote) && printNote.textContent.includes('实际大小') && printNote.textContent.includes('100%'),
+  printNote ? printNote.textContent.slice(0, 40) : '缺 printNote');
+
+const robots = await (await winOf().fetch('/robots.txt')).text();
+check('robots.txt 可访问且允许抓取', robots.includes('User-agent: *') && robots.includes('Allow: /'));
+
+const resp404 = await winOf().fetch('/404.html');
+const html404 = await resp404.text();
+check('404 页面存在且指向首页', resp404.ok && html404.includes('这个页面不存在') && html404.includes('href="/"'));
+
 /* ── 撤销栈深度 ≥ 20 ───────────────────────────── */
 
 check('撤销历史容量至少 20 步', cm().history && cm().history.limit >= 20, String(cm().history && cm().history.limit));
@@ -306,6 +323,10 @@ if (pdf) {
   check('PDF MediaBox 与 2000×700 mm 换算一致（约 5669 × 1984 pt）',
     /5669\.\d+\s+1984\.\d+/.test(mediaBox), mediaBox);
 
+  check('PDF 元信息写入尺寸（ASCII，不乱码）',
+    /Carton Mark artwork 600x400x300 mm/.test(pdfText)
+    && /Unfolded net 2000x700 mm at 1:1/.test(pdfText));
+
   check('中文按矢量路径输出（没有文字对象 BT/Tj）',
     !/\bBT\b/.test(pdfText) && !/\bTj\b/.test(pdfText),
     `BT=${/\bBT\b/.test(pdfText)} Tj=${/\bTj\b/.test(pdfText)}`);
@@ -317,6 +338,20 @@ if (pdf) {
 
   const pdfPanel = await cm().exportPdf({ mode: 'panel', compress: false });
   check('每面一页模式 = 2 页（前后两面有内容）', pdfPanel.pageCount === 2, String(pdfPanel.pageCount));
+
+  const tilePdf = await cm().exportPdf({ mode: 'tile', tilePaper: 'a3', compress: false });
+  check('A3 拼版 = 15 块（5 列 × 3 行）', tilePdf.pageCount === 15, String(tilePdf.pageCount));
+  check('拼版纸张 = A3 横放 420 × 297 mm',
+    Math.abs(tilePdf.pageSize.width - 420) < 0.5 && Math.abs(tilePdf.pageSize.height - 297) < 0.5,
+    JSON.stringify(tilePdf.pageSize));
+
+  const tileText = await tilePdf.blob.text();
+  const pageObjects = (tileText.match(/\/Type\s*\/Page(?![s])/g) || []).length;
+  check('拼版 PDF 里有 15 个页面对象', pageObjects === 15, String(pageObjects));
+
+  const tilePdfA4 = await cm().exportPdf({ mode: 'tile', tilePaper: 'a4', compress: false });
+  check('A4 拼版块数比 A3 多', tilePdfA4.pageCount > tilePdf.pageCount,
+    `A4 ${tilePdfA4.pageCount} vs A3 ${tilePdf.pageCount}`);
 }
 
 // 空内容导出应该给出明确提示
@@ -332,6 +367,20 @@ try {
 }
 cm().state.panels = savedPanels;
 check('没有内容时拒绝导出并提示', /还没有任何箱唛内容/.test(emptyMsg), emptyMsg);
+
+/* ── 导出弹层：拼版选项 ────────────────────────── */
+
+click(docOf().getElementById('exportBtn'));
+await tick(400);
+docOf().getElementById('exportMode').value = 'tile';
+fire(docOf().getElementById('exportMode'), 'change');
+await tick(300);
+check('导出弹层切到拼版时出现纸张选择', !docOf().getElementById('tilePaperField').hidden);
+check('拼版摘要显示块数', docOf().getElementById('exportSummary').textContent.includes('块'));
+check('拼版提示强调按 100% 打印',
+  docOf().getElementById('exportWarnings').textContent.includes('拼接') ||
+  docOf().getElementById('printNote').textContent.includes('100%'));
+docOf().getElementById('exportDialog').close();
 
 /* ── 窄屏 380px ────────────────────────────────── */
 
@@ -354,6 +403,8 @@ check('窄屏下点面板能打开编辑器且不撑破视口',
   !mdoc.getElementById('editorCard').hidden && mdoc.documentElement.scrollWidth <= mwin.innerWidth + 1,
   `${mdoc.documentElement.scrollWidth} vs ${mwin.innerWidth}`);
 check('窄屏下元素照常渲染', mdoc.querySelectorAll('.ed-el').length >= 1);
+check('窄屏显示「精确定位请用桌面端」提示',
+  mdoc.getElementById('mobileHint') !== null && !mdoc.getElementById('mobileHint').hidden);
 
 summary.textContent = fail === 0 ? `全部通过：${pass} 项` : `失败 ${fail} 项 / 共 ${pass + fail} 项`;
 summary.className = fail === 0 ? 'pass' : 'fail';

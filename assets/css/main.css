@@ -1,4 +1,4 @@
-/* Carton Mark · 全局样式：白底、深色字、技术感、高信息密度 */
+﻿/* Carton Mark · 全局样式：白底、深色字、技术感、高信息密度 */
 :root {
   --ink: #0f172a;
   --ink-2: #334155;
@@ -600,6 +600,29 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 }
 .export-warnings div.is-error { color: var(--danger); background: #fef2f2; border-color: #fecaca; }
 
+/* ── 打印说明 / 移动端提示 ─────────────────────── */
+.mobile-hint {
+  margin: 10px 20px 0;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.print-note {
+  margin: 14px 20px 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.print-note h2 { font-size: 13px; margin: 0 0 6px; }
+.print-note ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-2); line-height: 1.8; }
+.print-note b { color: var(--ink); }
+
 /* ── 响应式 ─────────────────────────────────────── */
 @media (max-width: 1080px) {
   .workspace { grid-template-columns: 1fr; }
@@ -626,6 +649,8 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   .workspace { padding: 12px 14px 0; }
   .footnote { padding: 10px 14px 20px; }
   .notice { margin: 10px 14px 0; }
+  .mobile-hint { margin: 10px 14px 0; }
+  .print-note { margin: 12px 14px 0; padding: 10px 12px; }
   .card-meta { display: none; }
   .editor { margin: 12px 14px 0; }
   .editor-head { padding: 10px 12px; }

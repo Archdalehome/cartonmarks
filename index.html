@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，8 个可编辑面（4 箱身面 + 4 主摇盖），导出 1:1 PDF。">
+  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，8 个可编辑面（4 箱身面 + 4 主摇盖），1:1 导出 PDF，支持 A3/A4 拼版。">
+  <meta name="theme-color" content="#1f6feb">
+  <meta property="og:title" content="箱唛设计工具 · Carton Mark">
+  <meta property="og:description" content="RSC 开槽箱展开图在线设计，文字/图片箱唛编辑，1:1 导出 PDF。">
+  <meta property="og:type" content="website">
   <title>箱唛设计工具 · Carton Mark</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Cpath d='M8 11.5l8-4 8 4v9l-8 4-8-4z' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M8 11.5l8 4 8-4M16 15.5v9' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/main.css">
@@ -23,7 +27,7 @@
   <div class="topbar-actions">
     <button type="button" class="btn btn-ghost btn-icon" id="undoBtn" title="撤销（Ctrl+Z）" aria-label="撤销" disabled>↶</button>
     <button type="button" class="btn btn-ghost btn-icon" id="redoBtn" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled>↷</button>
-    <span class="tag" id="stageTag">M3 · PDF 导出</span>
+    <span class="tag" id="stageTag">M4 · 收尾适配</span>
     <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>
     <button type="button" class="btn btn-primary" id="exportBtn">导出 PDF</button>
   </div>
@@ -79,6 +83,10 @@
   </div>
 </section>
 
+<div class="mobile-hint" id="mobileHint" hidden>
+  手机屏幕较小，拖拽和缩放时手感有限：精确定位建议用桌面端。当前仍可查看图纸、做简单修改。
+</div>
+
 <div class="notice" id="notice" hidden></div>
 
 <main class="workspace">
@@ -129,6 +137,15 @@
     </div>
     <aside class="props" id="propsPanel" aria-label="属性面板"></aside>
   </div>
+</section>
+
+<section class="print-note" id="printNote">
+  <h2>打印说明（最容易踩的坑）</h2>
+  <ul>
+    <li>打印对话框里选「<b>实际大小 / 100%</b>」，<b>不要</b>选「适合页面 / 缩放」——选了缩放就不是 1:1，箱唛印出来会偏小。</li>
+    <li>PDF 页面尺寸就是展开图的真实毫米数（例如 2000 × 700 mm），用绘图仪或按 100% 出图即可。</li>
+    <li>超大箱选「A3/A4 拼版」：每块边角有裁切标记，块上标了「接边：左/右/上/下」，按标记对齐拼接。</li>
+  </ul>
 </section>
 
 <footer class="footnote">
@@ -225,6 +242,14 @@
         <select id="exportMode">
           <option value="sheet">整张展开图（一页，1:1）</option>
           <option value="panel">每个有内容的面各一页</option>
+          <option value="tile">A3/A4 拼版（1:1，多张拼接）</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top:10px" id="tilePaperField" hidden>
+        <label class="label" for="exportPaper">拼版纸张</label>
+        <select id="exportPaper">
+          <option value="a3">A3（297 × 420 mm）</option>
+          <option value="a4">A4（210 × 297 mm）</option>
         </select>
       </div>
       <div class="field" style="margin-top:10px">

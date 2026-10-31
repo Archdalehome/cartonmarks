@@ -1,4 +1,4 @@
-/**
+﻿/**
  * tools/test-views.mjs —— 用 DOM 垫片把绘制代码真跑一遍
  * 检查：12 个区域、中文标签、尺寸标注、等轴测棱线、无运行时报错。
  * 用法：node tools/test-views.mjs
@@ -8,7 +8,7 @@ import { installDom, makeHost } from './dom-shim.mjs';
 
 installDom();
 
-const { computeNet } = await import('../assets/js/geometry.js');
+const { computeNet, registerShapeGeometry } = await import('../assets/js/geometry.js');
 const { renderNet } = await import('../assets/js/net-view.js');
 const { renderIso } = await import('../assets/js/iso-view.js');
 
@@ -168,6 +168,38 @@ check('容器变窄时 SVG 宽度同步变化', () => {
   const root2 = narrow.children[0];
   assert.equal(root2.attrs.width, '360');
   assert.equal(root2.filter((n) => n.attrs['data-panel']).length, 12);
+});
+
+console.log('箱型扩展点');
+
+registerShapeGeometry('fake-render', (dims, id) => ({
+  shape: id,
+  width: 500,
+  height: 300,
+  bodyTop: 0,
+  bodyBottom: 200,
+  panels: {
+    pa: { label: 'A 面', kind: 'body', slot: 'body', editable: true, x: 0, y: 0, w: 300, h: 200 },
+    pb: { label: 'B 面', kind: 'body', slot: 'body', editable: true, x: 300, y: 0, w: 200, h: 100 },
+    waste: { label: '废料区', kind: 'minor', slot: 'minor', editable: false, x: 0, y: 200, w: 300, h: 100 },
+  },
+  outline: [[0, 0], [500, 0], [500, 300], [0, 300]],
+  folds: [],
+  cuts: [],
+  dims,
+}));
+
+check('renderNet 完全按几何面板渲染（假箱型 2 个可编辑面 + 1 个不可编辑区）', () => {
+  const fakeNet = computeNet(dims, 'fake-render');
+  const host3 = makeHost(600);
+  renderNet(host3, fakeNet, { onSelect: () => {} });
+  const svg3 = host3.children[0];
+  const gs = svg3.filter((n) => n.attrs['data-panel']);
+  assert.equal(gs.length, 3);
+  assert.equal(gs.filter((g) => g.attrs.role === 'button').length, 2);
+  assert.equal(gs.filter((g) => g.classList.contains('is-locked')).length, 1);
+  assert.ok(gs.some((g) => g.attrs['data-panel'] === 'pa'));
+  assert.ok(gs.some((g) => g.attrs['data-panel'] === 'pb'));
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);
