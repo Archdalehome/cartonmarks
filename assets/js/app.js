@@ -1,4 +1,4 @@
-﻿/**
+/**
  * app.js —— 页面装配与交互
  *
  * 数据流：输入（毫米）→ 几何计算 → 视图绘制；
@@ -23,6 +23,7 @@ import { renderProperties, syncNumberFields } from './properties.js';
 import { History } from './history.js';
 import { clampElement, createTextElement, createImageElement, createLineElement, deepCopyElement } from './elements.js';
 import { validateDim, displayValue, unitSuffix, fmt } from './units.js';
+import { initAccountUI, currentAccount, isSubscribed, openLogin, openSubscribe, refreshAccount, handleApiError } from './auth-ui.js';
 import { exportPdf, imageReport } from './pdf-export.js';
 import { summarize, exportFileName, MIN_DPI } from './pdf-plan.js';
 
@@ -46,6 +47,8 @@ const dom = {
   helpBtn: el('helpBtn'),
   helpDialog: el('helpDialog'),
   toast: el('toast'),
+  templatesBtn: el('templatesBtn'),
+  serviceBanner: el('serviceBanner'),
   mobileHint: el('mobileHint'),
   exportPaper: el('exportPaper'),
   tilePaperField: el('tilePaperField'),
@@ -168,6 +171,11 @@ async function init() {
   history.reset(snapshot());
   updateHistoryButtons();
 
+  // 账号 / 订阅：首屏拉一次 /api/me，失败按游客处理，不挡使用
+  bindAccountGate();
+  initAccountUI({ onChange: onAccountChanged })
+    .then((acc) => onAccountChanged(acc))
+    .catch(() => onAccountChanged({ user: null, subExpiresAt: null, subscribed: false, backendDown: false }));
   // 支持 ?panel=front 这类深链，方便直接打开某一面
   const wanted = new URLSearchParams(location.search).get('panel');
   if (wanted && isEditablePanel(lastNet, wanted)) selectPanel(wanted, { scroll: false });
@@ -182,6 +190,38 @@ function mergeDraftPanels(rawPanels) {
   }
 }
 
+/** 订阅门：未订阅点 L 形/斜形/模板 → 弹订阅；已订阅 → 说明 M8/M9 未开放 */
+function bindAccountGate() {
+  document.querySelectorAll('[data-locked-shape]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!isSubscribed()) {
+        openSubscribe();
+        return;
+      }
+      showToast('L 形 / 斜形箱的尺寸参数还在确认（M8），确认后开放');
+    });
+  });
+
+  dom.templatesBtn?.addEventListener('click', () => {
+    if (!isSubscribed()) {
+      openSubscribe();
+      return;
+    }
+    showToast('模板保存与调用在 M9 开放');
+  });
+}
+
+function onAccountChanged(acc) {
+  if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
+  document.querySelectorAll('[data-locked-shape]').forEach((btn) => {
+    const name = btn.dataset.lockedShape === 'lshape' ? 'L 形箱' : '斜形箱';
+    btn.textContent = acc.subscribed ? `${name}（M8）` : `${name} 🔒`;
+  });
+  if (dom.templatesBtn) {
+    dom.templatesBtn.classList.toggle('is-locked', !acc.subscribed);
+    dom.templatesBtn.textContent = acc.subscribed ? '模板' : '模板 🔒';
+  }
+}
 function buildShapeSelect() {
   dom.shape.replaceChildren();
   for (const s of SHAPES) {
@@ -1004,6 +1044,7 @@ window.__CM__ = {
   closeElementDialog,
   copyPanelTo,
   exportPdf: exportForTest,
+  account: { state: currentAccount, openLogin, openSubscribe, refresh: refreshAccount, handleError: handleApiError },
   undo,
   redo,
 };

@@ -1,4 +1,4 @@
-﻿/* Carton Mark · 全局样式：白底、深色字、技术感、高信息密度 */
+/* Carton Mark · 全局样式：白底、深色字、技术感、高信息密度 */
 :root {
   --ink: #0f172a;
   --ink-2: #334155;
@@ -634,10 +634,10 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: 10px 14px; flex-wrap: nowrap; }
+  .topbar { padding: 10px 14px; flex-wrap: wrap; row-gap: 6px; }
+  .topbar-actions { flex: 1 1 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-start; row-gap: 6px; }
   .brand { flex: 1 1 auto; }
   .brand-text h1 { font-size: 14px; white-space: nowrap; }
-  .topbar-actions { flex: none; }
   .topbar-actions .tag { display: none; }
   .brand-text p { display: none; }
   .controls { padding: 12px 14px; gap: 10px 10px; }
@@ -660,4 +660,62 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   .editor-stage { padding: 10px; }
   .props { padding: 10px 12px; }
   .row3 { grid-template-columns: 1fr; }
+}
+
+/* ── 账号 / 订阅 ───────────────────────────────── */
+.account { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.account-email {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag--ok { color: #15803d; background: #ecfdf3; border-color: #bbf7d0; }
+.is-locked { color: var(--muted); }
+
+.shape-locks { display: flex; gap: 6px; margin-top: 6px; }
+.shape-lock {
+  border: 1px dashed var(--line-2);
+  background: #fbfcfe;
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.shape-lock:hover { border-color: var(--accent); color: var(--accent); }
+
+.service-banner {
+  margin: 10px 20px 0;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: var(--danger);
+}
+
+.code-row { display: flex; gap: 8px; }
+.code-row input { flex: 1; height: 32px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 6px; background: #fff; min-width: 0; }
+.code-row .btn { flex: none; white-space: nowrap; }
+
+.sub-price { font-size: 14px; color: var(--ink-2); margin-bottom: 6px; }
+.sub-price b { font-size: 30px; color: var(--ink); }
+.sub-perks { margin: 0 0 10px; padding-left: 18px; font-size: 13px; color: var(--ink-2); line-height: 1.9; }
+.sub-status { font-size: 12.5px; color: var(--muted); margin: 0 0 8px; }
+.sub-pay { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px; background: #fbfcfe; border: 1px solid var(--line); border-radius: 8px; }
+.sub-timer { font-size: 12px; color: var(--muted); margin: 0; }
+.sub-pay canvas { width: 220px; height: 220px; image-rendering: pixelated; background: #fff; }
+.auth-dialog { width: min(460px, calc(100vw - 32px)); }
+.auth-dialog .field { margin-bottom: 10px; }
+.auth-dialog input { width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 6px; background: #fff; }
+.sub-dialog { width: min(420px, calc(100vw - 32px)); }
+
+@media (max-width: 640px) {
+  .account-email { max-width: 96px; }
+  .shape-locks { flex-wrap: wrap; }
+  .service-banner { margin: 10px 14px 0; }
 }

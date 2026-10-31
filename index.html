@@ -27,7 +27,9 @@
   <div class="topbar-actions">
     <button type="button" class="btn btn-ghost btn-icon" id="undoBtn" title="撤销（Ctrl+Z）" aria-label="撤销" disabled>↶</button>
     <button type="button" class="btn btn-ghost btn-icon" id="redoBtn" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled>↷</button>
-    <span class="tag" id="stageTag">M5 · 英寸与线条</span>
+    <span class="tag" id="stageTag">M7 · 登录与订阅</span>
+    <button type="button" class="btn btn-ghost is-locked" id="templatesBtn">模板 🔒</button>
+    <div class="account" id="accountBox" aria-live="polite"></div>
     <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>
     <button type="button" class="btn btn-primary" id="exportBtn">导出 PDF</button>
   </div>
@@ -37,6 +39,10 @@
   <div class="field">
     <label class="label" for="shapeSelect">箱型</label>
     <select id="shapeSelect" class="select"></select>
+    <div class="shape-locks" aria-label="订阅箱型">
+      <button type="button" class="shape-lock" data-locked-shape="lshape">L 形箱 🔒</button>
+      <button type="button" class="shape-lock" data-locked-shape="bevel">斜形箱 🔒</button>
+    </div>
   </div>
 
   <span class="divider" aria-hidden="true"></span>
@@ -84,6 +90,7 @@
   </div>
 </section>
 
+<div class="service-banner" id="serviceBanner" hidden>服务暂不可用，稍后再试（登录 / 订阅相关功能）</div>
 <div class="mobile-hint" id="mobileHint" hidden>
   手机屏幕较小，拖拽和缩放时手感有限：精确定位建议用桌面端。当前仍可查看图纸、做简单修改。
 </div>
@@ -290,10 +297,77 @@
   </form>
 </dialog>
 
+<dialog id="authDialog" class="element-dialog auth-dialog">
+  <form method="dialog" id="authForm">
+    <div class="help-head">
+      <h2 id="authTitle">登录</h2>
+      <button class="btn btn-ghost btn-icon" type="button" id="authClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="element-body">
+      <div class="tabs" id="authTabs" role="tablist">
+        <button type="button" role="tab" data-auth-tab="login" class="is-active" aria-selected="true">密码登录</button>
+        <button type="button" role="tab" data-auth-tab="register" aria-selected="false">邮箱注册</button>
+      </div>
+      <div class="field">
+        <label class="label" for="authEmail">邮箱</label>
+        <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+      </div>
+      <div class="field" id="authPasswordField">
+        <label class="label" for="authPassword">密码</label>
+        <input id="authPassword" type="password" autocomplete="current-password" placeholder="8–72 位">
+      </div>
+      <div class="field" id="authCodeField" hidden>
+        <label class="label" for="authCode">验证码</label>
+        <div class="code-row">
+          <input id="authCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 位数字">
+          <button type="button" class="btn" id="sendCodeBtn">发送验证码</button>
+        </div>
+      </div>
+      <div class="field" id="authNameField" hidden>
+        <label class="label" for="authName">昵称（可选）</label>
+        <input id="authName" type="text" maxlength="40">
+      </div>
+      <p class="element-error" id="authError" role="alert"></p>
+      <p class="hint">注册用邮箱验证码，10 分钟内有效；登录后仍只能使用矩形箱，订阅后解锁 L 形/斜形箱与模板。</p>
+    </div>
+    <div class="help-foot">
+      <button type="button" class="btn" id="authCancel">取消</button>
+      <button type="submit" class="btn btn-primary" id="authSubmit">登录</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="subDialog" class="element-dialog sub-dialog">
+  <div class="help-head">
+    <h2>订阅解锁</h2>
+    <button class="btn btn-ghost btn-icon" type="button" id="subClose" aria-label="关闭">✕</button>
+  </div>
+  <div class="element-body">
+    <div class="sub-price"><b>¥9.9</b><span>/ 年</span></div>
+    <ul class="sub-perks">
+      <li>L 形箱、斜形箱</li>
+      <li>箱唛模板保存与一键调用</li>
+      <li>1:1 PDF 导出不限次数</li>
+    </ul>
+    <p class="sub-status" id="subStatus">当前未订阅</p>
+    <div class="sub-pay" id="subPayArea" hidden>
+      <canvas id="subQr" width="220" height="220" aria-label="微信支付二维码"></canvas>
+      <p class="sub-timer" id="subTimer" hidden></p>
+      <p class="hint">用微信扫一扫支付 ¥9.9；支付完成后自动解锁，不用手动刷新。</p>
+    </div>
+    <p class="element-error" id="subError" role="alert"></p>
+  </div>
+  <div class="help-foot">
+    <button type="button" class="btn" id="subCloseBtn">关闭</button>
+    <button type="button" class="btn btn-primary" id="subPayBtn">微信支付 ¥9.9</button>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/opentype.min.js"></script>
+<script src="vendor/qrcode.js"></script>
 <script type="module" src="assets/js/app.js"></script>
 </body>
 </html>

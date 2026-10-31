@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -448,6 +448,117 @@ check('英寸下展开图仍按毫米重算（2×609.6 + 2×400 = 2019.2）',
 click(docOf().querySelector('[data-unit="mm"]'));
 await tick(200);
 
+/* ── M7：账号 / 订阅 / 权限门 ───────────────────── */
+
+const mock = { user: null, sub: null, codes: 0, payCalls: 0 };
+winOf().fetch = async (url, opts = {}) => {
+  const path = String(url).split('?')[0];
+  const method = (opts.method || 'GET').toUpperCase();
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  const respond = (status, data) =>
+    new (winOf().Response)(data === null ? null : JSON.stringify(data), {
+      status,
+      headers: data === null ? undefined : { 'Content-Type': 'application/json' },
+    });
+
+  if (path === '/api/me') return respond(200, { user: mock.user, subExpiresAt: mock.sub });
+  if (path === '/api/auth/code') { mock.codes += 1; return respond(200, { ok: true, retryAfter: 60 }); }
+  if (path === '/api/auth/register' || path === '/api/auth/login') {
+    mock.user = { id: 'u_1', email: body.email, createdAt: '2026-10-31T00:00:00.000Z' };
+    return respond(path.endsWith('register') ? 201 : 200, { user: mock.user });
+  }
+  if (path === '/api/auth/logout') { mock.user = null; return respond(204, null); }
+  if (path === '/api/pay/create') {
+    mock.payCalls += 1;
+    return respond(200, { orderId: 'cm_20261031_abcdef', qr: 'http://ipay.yltg.com.cn/tgpay/allQrCode?orderId=cm_20261031_abcdef', expiresIn: 7200, amount: 990 });
+  }
+  if (path === '/api/pay/status') { mock.sub = '2027-10-31T00:00:00.000Z'; return respond(200, { status: 'success', subExpiresAt: mock.sub }); }
+  return respond(404, { error: 'not_found' });
+};
+
+await cm().account.refresh();
+check('游客态：顶栏有登录入口', docOf().querySelector('#accountBox [data-action="login"]') !== null);
+
+click(docOf().querySelector('#accountBox [data-action="login"]'));
+await tick(120);
+check('登录弹层能打开', docOf().getElementById('authDialog').open === true);
+click(docOf().querySelector('[data-auth-tab="register"]'));
+check('切到注册后出现验证码输入', docOf().getElementById('authCodeField').hidden === false);
+
+docOf().getElementById('authEmail').value = 'a@b.com';
+click(docOf().getElementById('sendCodeBtn'));
+await tick(250);
+check('发码后按后端 retryAfter 进入倒计时',
+  /秒后重发/.test(docOf().getElementById('sendCodeBtn').textContent),
+  docOf().getElementById('sendCodeBtn').textContent);
+
+docOf().getElementById('authCode').value = '123456';
+docOf().getElementById('authPassword').value = 'password123';
+docOf().getElementById('authForm').requestSubmit();
+await tick(400);
+check('注册成功：弹层关闭、顶栏显示邮箱',
+  docOf().getElementById('authDialog').open === false
+  && docOf().getElementById('accountBox').textContent.includes('a@b.com'));
+check('未订阅状态可见', docOf().getElementById('accountBox').textContent.includes('未订阅'));
+
+click(docOf().querySelector('[data-locked-shape="lshape"]'));
+await tick(150);
+check('未订阅点 L 形箱 → 弹订阅层', docOf().getElementById('subDialog').open === true);
+check('订阅价格显示 9.9', docOf().getElementById('subDialog').textContent.includes('9.9'));
+
+click(docOf().getElementById('subPayBtn'));
+await tick(600);
+const qrCanvas = docOf().getElementById('subQr');
+const qrCtx = qrCanvas.getContext('2d');
+const qrData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height).data;
+let darkPixels = 0;
+for (let i = 0; i < qrData.length; i += 4) if (qrData[i] < 128) darkPixels += 1;
+check('Xorpay 返回的 http 二维码串被原样编码（不假设 weixin://）',
+  qrCanvas.width === 220 && darkPixels > 500, `dark=${darkPixels}`);
+check('二维码有效期倒计时按 expiresIn 显示',
+  docOf().getElementById('subTimer').hidden === false
+  && /有效期/.test(docOf().getElementById('subTimer').textContent),
+  docOf().getElementById('subTimer').textContent);
+
+await tick(4000);
+check('轮询成功后订阅生效', cm().account.state().subscribed === true);
+check('订阅弹层提示已订阅', /订阅成功/.test(docOf().getElementById('subStatus').textContent));
+check('二维码有效期倒计时已隐藏', docOf().getElementById('subTimer').hidden === true);
+
+docOf().getElementById('subDialog').close();
+await tick(150);
+check('已订阅后 L 形锁打开',
+  !docOf().querySelector('[data-locked-shape="lshape"]').textContent.includes('🔒'));
+check('已订阅后模板按钮解锁', docOf().getElementById('templatesBtn').textContent === '模板');
+
+click(docOf().querySelector('[data-locked-shape="lshape"]'));
+await tick(150);
+check('已订阅点 L 形 → 提示 M8 未开放',
+  docOf().getElementById('toast').textContent.includes('M8'));
+
+cm().account.handleError({ status: 401, code: 'unauthorized' });
+await tick(120);
+check('401 → 弹登录层', docOf().getElementById('authDialog').open === true);
+docOf().getElementById('authDialog').close();
+cm().account.handleError({ status: 403, code: 'not_subscribed' });
+await tick(120);
+check('403 not_subscribed → 弹订阅层', docOf().getElementById('subDialog').open === true);
+docOf().getElementById('subDialog').close();
+
+mock.sub = '2020-01-01T00:00:00.000Z';
+await cm().account.refresh();
+check('订阅过期自动落回锁态',
+  docOf().querySelector('[data-locked-shape="lshape"]').textContent.includes('🔒'));
+
+winOf().fetch = async () =>
+  new (winOf().Response)(JSON.stringify({ error: 'backend_unavailable', message: '服务端尚未配置完成' }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' },
+  });
+await cm().account.refresh();
+check('503 → 显示服务不可用横幅且页面不白屏',
+  !docOf().getElementById('serviceBanner').hidden && docOf().querySelector('.workspace') !== null);
+
 /* ── 窄屏 380px ────────────────────────────────── */
 
 await new Promise((resolve) => {
@@ -458,9 +569,13 @@ await tick(400);
 
 const mdoc = mob.contentDocument;
 const mwin = mob.contentWindow;
+const wideEls = Array.from(mdoc.querySelectorAll('body *'))
+  .filter((el) => el.getBoundingClientRect().right > mwin.innerWidth + 1)
+  .slice(0, 4)
+  .map((el) => `${el.tagName}.${String(el.className).slice(0, 20)}`);
 check('窄屏无横向溢出',
   mdoc.documentElement.scrollWidth <= mwin.innerWidth + 1,
-  `${mdoc.documentElement.scrollWidth} vs ${mwin.innerWidth}`);
+  `${mdoc.documentElement.scrollWidth} vs ${mwin.innerWidth} | ${wideEls.join(', ')}`);
 
 const mFront = mdoc.querySelector('.panel[data-panel="front"]');
 mFront.dispatchEvent(new mwin.MouseEvent('click', { bubbles: true }));
