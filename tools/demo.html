@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Carton Mark · 演示数据</title>
+<style>body{font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif;padding:40px;color:#0f172a}</style>
+</head>
+<body>
+<p>正在写入演示草稿并跳转到编辑器…</p>
+<script>
+// 仅用于本地看效果的演示数据，不参与线上的正常流程
+const logo = (() => {
+  const c = document.createElement('canvas');
+  c.width = 360; c.height = 200;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1f6feb';
+  ctx.fillRect(0, 0, 360, 200);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 64px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('CARTON', 180, 100);
+  return c.toDataURL('image/png');
+})();
+
+const text = (id, value, x, y, w, h, fontSize, extra = {}) => ({
+  id, type: 'text', x, y, w, h, rotation: 0,
+  text: value, fontSize, bold: true, align: 'center', src: '', ...extra,
+});
+
+const draft = {
+  version: 3,
+  unit: 'mm',
+  shape: 'rsc',
+  dims: { L: 600, W: 400, H: 300 },
+  panels: {
+    front: {
+      elements: [
+        { id: 'demo-logo', type: 'image', x: 60, y: 24, w: 200, h: 111, rotation: 0, text: '', fontSize: 0, bold: false, align: 'left', src: logo },
+        text('demo-t1', '小心轻放', 60, 158, 200, 38, 30),
+        text('demo-t2', 'MADE IN CHINA', 300, 40, 240, 26, 20, { align: 'left' }),
+        text('demo-t3', '型号：CM-600', 300, 210, 240, 26, 18, { bold: false, align: 'left' }),
+      ],
+    },
+    back: { elements: [] },
+    right: { elements: [] },
+    left: { elements: [] },
+    topFront: { elements: [] },
+    topBack: { elements: [] },
+    bottomFront: { elements: [] },
+    bottomBack: { elements: [] },
+  },
+};
+
+localStorage.setItem('cartonmark.draft.v1', JSON.stringify(draft));
+localStorage.removeItem('cartonmark.draft.v1.idb');
+location.replace('/index.html?panel=front');
+</script>
+</body>
+</html>

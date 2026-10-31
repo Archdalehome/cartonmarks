@@ -91,13 +91,11 @@ function sanitizeElements(list) {
   return out;
 }
 
-/** 读取本地草稿；任何异常都退回示例值，不让页面挂掉 */
-export function loadDraft() {
+/** 把一份草稿对象清洗成可用状态；损坏的数据直接丢弃，不让页面挂掉 */
+export function parseDraft(data) {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    const dims = data && data.dims ? data.dims : null;
+    if (!data || typeof data !== 'object') return null;
+    const dims = data.dims;
     if (!dims) return null;
     const valid = ['L', 'W', 'H'].every(
       (k) => Number.isFinite(Number(dims[k])) && Number(dims[k]) > 0,
@@ -120,6 +118,17 @@ export function loadDraft() {
       shape: SHAPES.some((s) => s.id === data.shape && s.enabled) ? data.shape : 'rsc',
       panels,
     };
+  } catch {
+    return null;
+  }
+}
+
+/** 从 localStorage 读草稿（只做同步读取；IndexedDB 兜底在 storage.js） */
+export function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    return parseDraft(JSON.parse(raw));
   } catch {
     return null;
   }

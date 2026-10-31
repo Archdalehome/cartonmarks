@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，12 个可编辑面（4 箱身面 + 4 主摇盖 + 4 防尘摇盖），导出 1:1 PDF。">
+  <meta name="description" content="箱唛设计工具 Carton Mark：RSC 开槽箱展开图在线设计，8 个可编辑面（4 箱身面 + 4 主摇盖），导出 1:1 PDF。">
   <title>箱唛设计工具 · Carton Mark</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Cpath d='M8 11.5l8-4 8 4v9l-8 4-8-4z' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M8 11.5l8 4 8-4M16 15.5v9' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/css/main.css">
@@ -21,7 +21,9 @@
     </div>
   </div>
   <div class="topbar-actions">
-    <span class="tag" id="stageTag">M1 · 图纸预览</span>
+    <button type="button" class="btn btn-ghost btn-icon" id="undoBtn" title="撤销（Ctrl+Z）" aria-label="撤销" disabled>↶</button>
+    <button type="button" class="btn btn-ghost btn-icon" id="redoBtn" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled>↷</button>
+    <span class="tag" id="stageTag">M2 · 编辑器</span>
     <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>
   </div>
 </header>
@@ -89,10 +91,10 @@
 
   <section class="card">
     <div class="card-head">
-      <h2>展开图 · 12 个可编辑面</h2>
+      <h2>展开图 · 12 个区域 / 8 个可编辑面</h2>
       <span class="card-meta" id="netMeta">—</span>
     </div>
-    <div class="canvas canvas--net" id="netHost" aria-label="RSC 开槽箱展开图，点击面板可选中"></div>
+    <div class="canvas canvas--net" id="netHost" aria-label="RSC 开槽箱展开图，点击可编辑面进入编辑"></div>
     <div class="statusbar">
       <span id="netSize">—</span>
       <span class="dot" aria-hidden="true"></span>
@@ -101,8 +103,35 @@
   </section>
 </main>
 
+<section class="editor" id="editorCard" hidden aria-label="面板编辑器">
+  <div class="editor-head">
+    <div class="editor-title">
+      <h2 id="editorTitle">前箱唛</h2>
+      <span class="editor-sub" id="editorSub">箱身面 · 600 × 300 mm</span>
+    </div>
+    <div class="editor-tools">
+      <button type="button" class="btn" id="addTextBtn">+ 文字</button>
+      <button type="button" class="btn" id="addImageBtn">+ 图片</button>
+      <span class="divider" aria-hidden="true"></span>
+      <label class="label" for="copyTarget">复制到</label>
+      <select id="copyTarget" class="select select--sm"></select>
+      <button type="button" class="btn" id="copyOverwriteBtn">覆盖</button>
+      <button type="button" class="btn" id="copyAppendBtn">追加</button>
+      <button type="button" class="btn btn-ghost" id="clearPanelBtn">清空本面</button>
+      <button type="button" class="btn btn-icon btn-ghost" id="closeEditorBtn" aria-label="收起编辑器">✕</button>
+    </div>
+  </div>
+  <div class="editor-body">
+    <div class="editor-stage">
+      <div class="editor-canvas" id="editorCanvas"></div>
+      <p class="editor-hint">空白处点击新建元素 · 拖动移动 · 拖四角缩放 · 方向键微调（Shift ×10）· Delete 删除</p>
+    </div>
+    <aside class="props" id="propsPanel" aria-label="属性面板"></aside>
+  </div>
+</section>
+
 <footer class="footnote">
-  虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，左/右先折入）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。
+  虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，仅结构件，不印箱唛）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。
 </footer>
 
 <dialog id="helpDialog" class="help-dialog">
@@ -115,11 +144,69 @@
       <ol>
         <li><b>选箱型与输尺寸</b>：当前只支持「矩形箱 / RSC 开槽箱」，L 为长、W 为宽、H 为高，单位可切毫米或厘米。</li>
         <li><b>看两张图</b>：左侧等轴测轮廓看立体比例，右侧展开图看刀模布局，尺寸线随输入实时变化。</li>
-        <li><b>点面板</b>：展开图上 12 个区域均可点击高亮——4 个箱身面（前 / 右 / 后 / 左）、4 片主摇盖（前顶 / 后顶 / 前底 / 后底，L×W÷2）和 4 片防尘摇盖（右顶 / 左顶 / 右底 / 左底，W×W÷2）。防尘摇盖可在顶部开关里隐藏。</li>
-        <li><b>下一步</b>：面板内的文字、图片编辑在 M2 开放，PDF 导出在 M3 开放。</li>
+        <li><b>进编辑器</b>：点展开图上任意一个可编辑面（4 箱身面 + 4 主摇盖），下方出现放大编辑区和属性面板。</li>
+        <li><b>加内容</b>：点面板空白处弹出新建窗口，可加文字（内容/字号/加粗/对齐）或图片（本机压缩后保存，不上传服务器）。</li>
+        <li><b>排版</b>：拖元素移动、拖四角缩放、方向键微调（Shift 为 10 mm），元素不会跑出面板边界。</li>
+        <li><b>复用</b>：「复制到」别的面支持覆盖或追加，复制出来的是独立副本。</li>
+        <li><b>撤销</b>：工具栏 ↶ / ↷ 或 Ctrl+Z / Ctrl+Shift+Z，保留 60 步。</li>
       </ol>
-      <p class="help-note">尺寸以毫米为准：600 × 400 × 300 的箱子，展开图为 2000 × 700 mm，前面板 600 × 300、侧面 400 × 300、主摇盖 600 × 200、防尘摇盖 400 × 200。</p>
-      <p class="help-note">输入非法尺寸时会保留上一次有效图纸并给出提示；草稿自动保存在本机浏览器。</p>
+      <p class="help-note">尺寸以毫米为准：600 × 400 × 300 的箱子，展开图为 2000 × 700 mm，前面板 600 × 300、侧面 400 × 300、主摇盖 600 × 200、防尘摇盖 400 × 200（防尘摇盖不印箱唛）。</p>
+      <p class="help-note">草稿自动保存在本机浏览器；图片过大时改用 IndexedDB 存储。M3 的 PDF 导出会按 1:1 真实毫米出图。</p>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="elementDialog" class="element-dialog">
+  <form method="dialog" id="elementForm">
+    <div class="help-head">
+      <h2 id="elementTitle">新建文字</h2>
+      <button class="btn btn-ghost btn-icon" type="button" id="elementCloseBtn" aria-label="关闭">✕</button>
+    </div>
+    <div class="element-body">
+      <div class="tabs" id="elementTabs" role="tablist">
+        <button type="button" role="tab" data-tab="text" class="is-active" aria-selected="true">文字</button>
+        <button type="button" role="tab" data-tab="image" aria-selected="false">图片</button>
+      </div>
+
+      <div id="textPane">
+        <div class="field">
+          <label class="label" for="elementText">文字内容</label>
+          <textarea id="elementText" rows="3" placeholder="例如：小心轻放 / MADE IN CHINA / 产品名称"></textarea>
+        </div>
+        <div class="row3">
+          <div class="field">
+            <label class="label" for="elementFontSize">字号（mm）</label>
+            <input id="elementFontSize" type="number" min="3" max="300" step="1" value="20">
+          </div>
+          <div class="field">
+            <label class="label" for="elementAlign">对齐</label>
+            <select id="elementAlign">
+              <option value="left">左对齐</option>
+              <option value="center">居中</option>
+              <option value="right">右对齐</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label">样式</label>
+            <label class="check"><input type="checkbox" id="elementBold"> <span>加粗</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div id="imagePane" hidden>
+        <div class="field">
+          <label class="label" for="elementFile">选择图片（PNG / JPG / WebP / GIF / SVG）</label>
+          <input type="file" id="elementFile" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml">
+        </div>
+        <p class="hint">图片会先压缩再存进本机浏览器，不上传服务器；单张超过 1.5MB 的会自动降采样。</p>
+        <div id="imagePreview" class="image-preview"></div>
+      </div>
+
+      <p class="element-error" id="elementError" role="alert"></p>
+    </div>
+    <div class="help-foot">
+      <button type="button" class="btn" id="elementCancelBtn">取消</button>
+      <button type="submit" class="btn btn-primary" id="elementSubmitBtn">添加</button>
     </div>
   </form>
 </dialog>

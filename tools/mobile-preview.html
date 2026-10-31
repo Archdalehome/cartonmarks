@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Carton Mark · 390px 预览</title>
+<style>
+  body { margin: 0; padding: 16px; background: #e5e9f0; font: 12px/1.5 system-ui, sans-serif; color: #334155; }
+  .wrap { display: flex; gap: 16px; align-items: flex-start; }
+  .phone { width: 390px; height: 1100px; border: 0; background: #fff; border-radius: 10px; box-shadow: 0 4px 18px rgba(15,23,42,.15); }
+  .info { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  #readout { margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <iframe class="phone" id="phone" src="/index.html"></iframe>
+  <div class="info">
+    <div>390px 真宽 iframe 预览</div>
+    <div id="readout">测量中…</div>
+  </div>
+</div>
+<script>
+const phone = document.getElementById('phone');
+phone.addEventListener('load', () => {
+  const d = phone.contentDocument;
+  const w = phone.contentWindow.innerWidth;
+  const lines = [
+    `innerWidth = ${w}`,
+    `documentElement.scrollWidth = ${d.documentElement.scrollWidth}`,
+    `body.scrollWidth = ${d.body.scrollWidth}`,
+    `controls.width = ${Math.round(d.querySelector('.controls').getBoundingClientRect().width)}`,
+    `card.width = ${Math.round(d.querySelector('.card').getBoundingClientRect().width)}`,
+    `dimL.width = ${Math.round(d.getElementById('dimL').getBoundingClientRect().width)}`,
+    `workspace.width = ${Math.round(d.querySelector('.workspace').getBoundingClientRect().width)}`,
+    `overflow = ${d.documentElement.scrollWidth > w + 1 ? 'YES' : 'no'}`,
+  ];
+  document.getElementById('readout').textContent = lines.join('\n');
+});
+</script>
+</body>
+</html>

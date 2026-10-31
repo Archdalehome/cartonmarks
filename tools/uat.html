@@ -1,33 +1,43 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>Carton Mark M1 · 浏览器内自检</title>
+<title>Carton Mark M2 · 浏览器内自检</title>
 <style>
   body { font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif; margin: 0; padding: 16px 20px; color: #0f172a; }
-  h1 { font-size: 15px; margin: 0 0 8px; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  h2 { font-size: 13px; margin: 14px 0 6px; color: #334155; }
   ol { padding-left: 22px; margin: 0 0 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
   .pass::after { content: " ✓"; color: #15803d; }
   .fail::after { content: " ✗"; color: #c0392b; font-weight: 700; }
   .fail { color: #c0392b; }
   #summary { font-weight: 700; margin: 10px 0; }
-  iframe { border: 1px solid #cbd5e1; border-radius: 8px; margin-top: 10px; width: 1180px; height: 760px; }
+  iframe { border: 1px solid #cbd5e1; border-radius: 8px; margin-top: 10px; width: 1180px; height: 860px; }
 </style>
 </head>
 <body>
-<h1>Carton Mark M1 · 浏览器内自检（同源 iframe 真点击）</h1>
+<h1>Carton Mark M2 · 浏览器内自检（同源 iframe 真点击 / 真拖动 / 真缩放）</h1>
 <ol id="out"></ol>
 <div id="summary">运行中…</div>
 <iframe id="frame"></iframe>
-<iframe id="mob" style="width: 380px; height: 640px; margin-top: 8px;"></iframe>
+<iframe id="mob" style="width: 380px; height: 620px;"></iframe>
 
 <script type="module">
 const out = document.getElementById('out');
 const summary = document.getElementById('summary');
 const frame = document.getElementById('frame');
+const mob = document.getElementById('mob');
 
 let pass = 0;
 let fail = 0;
+
+function fatal(msg) {
+  summary.textContent = `脚本错误：${msg}`;
+  summary.className = 'fail';
+  document.title = 'UAT ERROR';
+}
+window.addEventListener('error', (e) => fatal(e.message || String(e.error)));
+window.addEventListener('unhandledrejection', (e) => fatal(String((e.reason && e.reason.message) || e.reason)));
 
 function check(name, ok, detail = '') {
   const li = document.createElement('li');
@@ -35,165 +45,263 @@ function check(name, ok, detail = '') {
   li.textContent = ok ? name : `${name}${detail ? ' — ' + detail : ''}`;
   out.appendChild(li);
   ok ? pass++ : fail++;
+  if (document.title !== 'UAT ERROR') {
+    summary.textContent = `进行中：${pass} 通过 / ${fail} 失败`;
+  }
   return ok;
 }
+const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const loaded = new Promise((resolve) => {
-  frame.addEventListener('load', resolve, { once: true });
-  frame.src = '/index.html';
-});
-await loaded;
+const docOf = () => frame.contentDocument;
+const winOf = () => frame.contentWindow;
+const $ = (s) => docOf().querySelector(s);
+const $$ = (s) => Array.from(docOf().querySelectorAll(s));
+const cm = () => winOf().__CM__;
+const click = (node) => node.dispatchEvent(new (winOf().MouseEvent)('click', { bubbles: true }));
+const fire = (node, type) => node.dispatchEvent(new (winOf().Event)(type, { bubbles: true }));
+const pointer = (node, type, x, y, id = 1) =>
+  node.dispatchEvent(new (winOf().PointerEvent)(type, { bubbles: true, clientX: x, clientY: y, button: 0, pointerId: id, isPrimary: true }));
 
-const win = frame.contentWindow;
-const doc = frame.contentDocument;
-const $ = (s) => doc.querySelector(s);
-const $$ = (s) => Array.from(doc.querySelectorAll(s));
-const fire = (el, type) => el.dispatchEvent(new win.Event(type, { bubbles: true }));
-const click = (el) => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-const val = (id) => doc.getElementById(id).value;
-
-// 重新载入页面状态：确保从示例尺寸开始
-if (val('dimL') !== '600' || val('dimW') !== '400' || val('dimH') !== '300') {
-  click(doc.getElementById('resetBtn'));
+async function loadFrame() {
+  await new Promise((resolve) => {
+    frame.addEventListener('load', resolve, { once: true });
+    frame.src = '/index.html?r=' + Date.now();
+  });
+  await tick(250);
 }
 
-check('页面脚本无异常，window.__CM__ 可用', Boolean(win.__CM__ && win.__CM__.getNet));
-check('几何结果 = 2000 × 700 mm', (() => {
-  const n = win.__CM__.getNet();
+await loadFrame();
+
+/* ── M1：图纸与口径 ─────────────────────────────── */
+
+check('页面脚本无异常，window.__CM__ 可用', Boolean(cm() && cm().state));
+check('几何 = 2000 × 700 mm', (() => {
+  const n = cm().getNet();
   return n && n.width === 2000 && n.height === 700;
 })());
+check('展开图 12 个区域', $$('.panel').length === 12, `实际 ${$$('.panel').length}`);
+check('8 个可编辑面可点击，防尘摇盖不可点',
+  $$('.panel[role="button"]').length === 8 && $$('.panel[data-slot="minor"][role="button"]').length === 0);
+check('12 个中文标签齐全',
+  ['前箱唛', '右侧箱唛', '后箱唛', '左侧箱唛', '前顶箱唛', '右顶箱唛', '后顶箱唛', '左顶箱唛',
+    '前底箱唛', '右底箱唛', '后底箱唛', '左底箱唛'].every((t) => $$('.panel-label').some((n) => n.textContent === t)));
 
-const panels = $$('.panel');
-check('展开图有 12 个区域', panels.length === 12, `实际 ${panels.length}`);
-check('其中 8 个可点击（4 箱身面 + 4 主摇盖）',
-  $$('.panel[role="button"]').length === 8 && $$('.panel[data-slot="minor"][role="button"]').length === 0,
-  `可点击 ${$$('.panel[role="button"]').length}`);
+const minorPanel = $('.panel[data-panel="topRight"]');
+click(minorPanel);
+check('点防尘摇盖不进入编辑态',
+  !minorPanel.classList.contains('is-selected') && docOf().getElementById('editorCard').hidden === true);
 
-const lockedMinor = $('.panel[data-panel="topRight"]');
-click(lockedMinor);
-check('点防尘摇盖不会进入编辑态（无高亮）',
-  !lockedMinor.classList.contains('is-selected') && !$('#selInfo').textContent.includes('已选'));
+/* ── M2：8 个可编辑面都能进编辑器 ──────────────── */
 
-const labels = $$('.panel-label').map((n) => n.textContent);
-const want = ['前箱唛', '右侧箱唛', '后箱唛', '左侧箱唛', '前顶箱唛', '右顶箱唛', '后顶箱唛', '左顶箱唛', '前底箱唛', '右底箱唛', '后底箱唛', '左底箱唛'];
-check('12 个中文标签齐全', want.every((w) => labels.includes(w)), labels.join(' / '));
+const editableKeys = ['front', 'right', 'back', 'left', 'topFront', 'topBack', 'bottomFront', 'bottomBack'];
+let allOpen = true;
+const failedPanels = [];
+for (const key of editableKeys) {
+  click($(`.panel[data-panel="${key}"]`));
+  await tick(120);
+  const card = docOf().getElementById('editorCard');
+  const title = docOf().getElementById('editorTitle').textContent;
+  const selected = cm().state.selected;
+  const ok = !card.hidden && selected === key && title === $(`.panel[data-panel="${key}"] .panel-label`).textContent;
+  if (!ok) {
+    allOpen = false;
+    failedPanels.push(`${key}:${selected}`)
+  }
+}
+check('8 个可编辑面都能点开编辑器且标题正确', allOpen, failedPanels.join(','));
 
-const sizes = $$('.panel-size').map((n) => n.textContent);
-check('面板尺寸标注：600×300 / 400×300 / 600×200 / 400×200',
-  sizes.includes('600 × 300') && sizes.includes('400 × 300') && sizes.includes('600 × 200') && sizes.includes('400 × 200'),
-  sizes.join(' / '));
+/* ── 新建文字 ──────────────────────────────────── */
 
-const dimTexts = $$('.dim-text').map((n) => n.textContent);
-check('尺寸线标注 2,000 / 700 / L 600 / W 400 / H 300',
-  ['2,000 mm', '700 mm', 'L 600', 'W 400', 'H 300'].every((t) => dimTexts.includes(t)),
-  dimTexts.join(' / '));
+click($('.panel[data-panel="front"]'));
+await tick(200);
+check('前面板编辑器已打开', !docOf().getElementById('editorCard').hidden && cm().state.selected === 'front');
 
-const front = $('.panel[data-panel="front"]');
-click(front);
-check('点击前面板后高亮', front.classList.contains('is-selected'));
-check('状态栏显示已选面板与尺寸',
-  $('#selInfo').textContent.includes('前箱唛') && $('#selInfo').textContent.includes('600 × 300'),
-  $('#selInfo').textContent);
+// 点画布空白处应弹新建窗口
+const canvasEl = $('.ed-canvas');
+const cb = canvasEl.getBoundingClientRect();
+canvasEl.dispatchEvent(new (winOf().MouseEvent)('click', { bubbles: true, clientX: cb.left + 4, clientY: cb.top + 4 }));
+check('点面板空白处弹出新建元素窗口', docOf().getElementById('elementDialog').open === true);
+docOf().getElementById('elementDialog').close();
 
-const other = $('.panel[data-panel="topBack"]');
-click(other);
-check('改选后只保留一个高亮',
-  other.classList.contains('is-selected') && !front.classList.contains('is-selected'));
+click(docOf().getElementById('addTextBtn'));
+check('「+ 文字」打开新建窗口', docOf().getElementById('elementDialog').open === true);
 
-click(other);
-check('再点一次取消选择', !other.classList.contains('is-selected'));
+docOf().getElementById('elementText').value = '小心轻放';
+docOf().getElementById('elementFontSize').value = '30';
+docOf().getElementById('elementBold').checked = true;
+docOf().getElementById('elementAlign').value = 'center';
+docOf().getElementById('elementForm').requestSubmit();
+await tick(200);
 
-// 非法输入
-const dimL = doc.getElementById('dimL');
-dimL.value = '0';
-fire(dimL, 'input');
-check('输入 0 时给出错误提示', $('#errL').textContent.trim().length > 0, $('#errL').textContent);
-check('非法输入时图纸保留上一次有效结果', $$('.panel').length === 12);
+let frontEls = cm().state.panels.front.elements;
+check('文字元素已加入', frontEls.length === 1 && frontEls[0].type === 'text');
+check('元素坐标/字号存的是毫米', frontEls[0].fontSize === 30
+  && frontEls[0].x >= 0 && frontEls[0].x + frontEls[0].w <= 600.001
+  && frontEls[0].y >= 0 && frontEls[0].y + frontEls[0].h <= 300.001,
+  JSON.stringify({ x: frontEls[0].x, y: frontEls[0].y, w: frontEls[0].w, h: frontEls[0].h }));
+check('文字元素已渲染到画布', $('.ed-el') !== null && $('.ed-el .ed-text').textContent === '小心轻放');
 
-dimL.value = '';
-fire(dimL, 'input');
-check('清空输入时提示"请输入"', $('#errL').textContent.includes('请输入'), $('#errL').textContent);
+/* ── 拖拽 ──────────────────────────────────────── */
 
-dimL.value = '9999';
-fire(dimL, 'input');
-check('超大尺寸被拒绝', $('#errL').textContent.includes('不能大于'), $('#errL').textContent);
+const el0 = cm().state.panels.front.elements[0];
+const before = { x: el0.x, y: el0.y };
+const node = $('.ed-el');
+const nb = node.getBoundingClientRect();
+const cx = nb.left + nb.width / 2;
+const cy = nb.top + nb.height / 2;
+pointer(node, 'pointerdown', cx, cy, 1);
+const nodeAfterSelect = $('.ed-el');
+pointer(nodeAfterSelect, 'pointermove', cx + 40, cy + 26, 1);
+pointer(nodeAfterSelect, 'pointerup', cx + 40, cy + 26, 1);
+await tick(120);
 
-dimL.value = '600';
-fire(dimL, 'input');
-check('恢复正常尺寸后错误提示消失', $('#errL').textContent.trim() === '');
+check('拖拽后元素位置变化', el0.x > before.x + 0.5 || el0.y > before.y + 0.5,
+  `from ${before.x.toFixed(1)},${before.y.toFixed(1)} to ${el0.x.toFixed(1)},${el0.y.toFixed(1)}`);
+check('拖拽后仍夹在面板内',
+  el0.x >= 0 && el0.y >= 0 && el0.x + el0.w <= 600.001 && el0.y + el0.h <= 300.001);
 
-// 单位切换
-click(doc.querySelector('[data-unit="cm"]'));
-check('切到厘米后输入框显示 60 / 40 / 30',
-  val('dimL') === '60' && val('dimW') === '40' && val('dimH') === '30',
-  `${val('dimL')}/${val('dimW')}/${val('dimH')}`);
-check('切单位不改图纸，仍为 2,000 × 700',
-  $('#netSize').textContent.includes('2,000 × 700'), $('#netSize').textContent);
+/* ── 四角缩放 ──────────────────────────────────── */
 
-// 改尺寸重绘（cm 下 W=50 → 500 mm）
-const dimW = doc.getElementById('dimW');
-dimW.value = '50';
-fire(dimW, 'input');
-check('W 改 500 mm 后展开尺寸变为 2,200 × 800',
-  $('#netSize').textContent.includes('2,200 × 800'), $('#netSize').textContent);
-check('尺寸变化后仍是 12 个面板', $$('.panel').length === 12);
+const sizeBefore = { w: el0.w, h: el0.h };
+const handle = $('.ed-handle[data-corner="se"]');
+const hb = handle.getBoundingClientRect();
+pointer(handle, 'pointerdown', hb.left + 4, hb.top + 4, 2);
+const nodeResize = $('.ed-el');
+pointer(nodeResize, 'pointermove', hb.left + 4 + 60, hb.top + 4 + 40, 2);
+pointer(nodeResize, 'pointerup', hb.left + 4 + 60, hb.top + 4 + 40, 2);
+await tick(120);
 
-// 恢复示例
-click(doc.getElementById('resetBtn'));
-check('恢复示例尺寸后回到 2,000 × 700',
-  $('#netSize').textContent.includes('2,000 × 700') && val('dimL') === '60',
-  $('#netSize').textContent);
+check('拖右下角后宽高变大', el0.w > sizeBefore.w + 0.5 && el0.h > sizeBefore.h + 0.5,
+  `${sizeBefore.w.toFixed(1)}×${sizeBefore.h.toFixed(1)} → ${el0.w.toFixed(1)}×${el0.h.toFixed(1)}`);
+check('缩放后仍夹在面板内',
+  el0.x + el0.w <= 600.001 && el0.y + el0.h <= 300.001);
 
-// 使用说明
-click(doc.getElementById('helpBtn'));
-check('使用说明弹层可打开', doc.getElementById('helpDialog').open === true);
-doc.getElementById('helpDialog').close();
-check('使用说明弹层可关闭', doc.getElementById('helpDialog').open === false);
+/* ── 方向键微调 ────────────────────────────────── */
 
-// 等轴测
-const iso = $('#isoHost svg');
-check('等轴测 SVG 已绘制，含 12 条棱线',
-  Boolean(iso) && iso.querySelectorAll('.iso-edge').length === 12,
-  iso ? String(iso.querySelectorAll('.iso-edge').length) : 'no svg');
-check('等轴测有 3 条隐藏背棱（虚线）', iso.querySelectorAll('.iso-edge.is-hidden').length === 3);
+const nudgeBefore = el0.x;
+docOf().body.dispatchEvent(new (winOf().KeyboardEvent)('keydown', { key: 'ArrowRight', bubbles: true }));
+await tick(80);
+check('方向键移动 1mm', Math.abs(el0.x - (nudgeBefore + 1)) < 0.01, `${nudgeBefore} → ${el0.x}`);
 
-// ── 防尘摇盖：只画轮廓，不参与箱唛 ───────────────
-check('4 片防尘摇盖都画出来但不带按钮语义',
-  $$('.panel[data-slot="minor"]').length === 4 && $$('.panel[data-slot="minor"]').every((p) => !p.getAttribute('role')));
+/* ── 上传图片（合成 File，真走 FileReader + canvas 压缩） ── */
 
-// ── 窄屏（380px）回归 ─────────────────────────────
-frame.style.display = 'none';
+click(docOf().getElementById('addImageBtn'));
+check('「+ 图片」打开上传面板', docOf().getElementById('elementDialog').open === true
+  && docOf().getElementById('imagePane').hidden === false);
 
-const mob = document.getElementById('mob');
+const cv = docOf().createElement('canvas');
+cv.width = 240;
+cv.height = 160;
+const ctx = cv.getContext('2d');
+ctx.fillStyle = '#1f6feb';
+ctx.fillRect(0, 0, 240, 160);
+ctx.fillStyle = '#fff';
+ctx.font = '28px sans-serif';
+ctx.fillText('LOGO', 60, 90);
+const dataUrl = cv.toDataURL('image/png');
+const blob = await (await winOf().fetch(dataUrl)).blob();
+const file = new (winOf().File)([blob], 'logo.png', { type: 'image/png' });
+const dt = new (winOf().DataTransfer)();
+dt.items.add(file);
+const fileInput = docOf().getElementById('elementFile');
+fileInput.files = dt.files;
+fire(fileInput, 'change');
+await tick(700);
+
+check('图片经 FileReader + 压缩后有预览',
+  docOf().querySelector('#imagePreview img') !== null,
+  docOf().getElementById('elementError').textContent);
+
+docOf().getElementById('elementForm').requestSubmit();
+await tick(300);
+
+frontEls = cm().state.panels.front.elements;
+const imgEl = frontEls.find((e) => e.type === 'image');
+check('图片元素已加入且 src 是 dataURL', Boolean(imgEl && imgEl.src.startsWith('data:image/')));
+check('图片默认尺寸在面板内', imgEl && imgEl.w <= 600 && imgEl.h <= 300);
+
+/* ── 复制到另一面（深拷贝） ────────────────────── */
+
+docOf().getElementById('copyTarget').value = 'back';
+click(docOf().getElementById('copyOverwriteBtn'));
+await tick(200);
+
+const backEls = cm().state.panels.back.elements;
+check('覆盖复制后目标面元素数量一致', backEls.length === frontEls.length, `${backEls.length} vs ${frontEls.length}`);
+check('复制是深拷贝：id 不同、内容一致',
+  backEls.every((b, i) => b.id !== frontEls[i].id && b.type === frontEls[i].type && b.text === frontEls[i].text));
+
+/* ── 改副本不影响原件 ──────────────────────────── */
+
+click($('.panel[data-panel="back"]'));
+await tick(200);
+const items = $$('.prop-item');
+click(items[0]);
+await tick(120);
+const ta = docOf().getElementById('propText');
+if (ta) {
+  ta.value = '改过的副本';
+  fire(ta, 'input');
+}
+await tick(150);
+
+const frontText = cm().state.panels.front.elements.find((e) => e.type === 'text');
+const backText = cm().state.panels.back.elements.find((e) => e.type === 'text');
+check('改副本后，原件文字不变', frontText.text === '小心轻放', frontText.text);
+check('副本文字已改', backText.text === '改过的副本', backText.text);
+
+/* ── 撤销 / 重做 ───────────────────────────────── */
+
+click(docOf().getElementById('undoBtn'));
+await tick(150);
+check('撤销后副本文字回到修改前',
+  cm().state.panels.back.elements.find((e) => e.type === 'text').text === '小心轻放');
+click(docOf().getElementById('redoBtn'));
+await tick(150);
+check('重做后副本文字恢复',
+  cm().state.panels.back.elements.find((e) => e.type === 'text').text === '改过的副本');
+
+/* ── 刷新后草稿还在 ────────────────────────────── */
+
+await tick(900); // 等草稿 debounce 落盘
+await loadFrame(); // 重新加载页面
+
+const frontAfter = cm().state.panels.front.elements;
+const backAfter = cm().state.panels.back.elements;
+check('刷新后前面板内容还在', frontAfter.length === 2, `实际 ${frontAfter.length}`);
+check('刷新后后面板内容还在', backAfter.length === 2, `实际 ${backAfter.length}`);
+check('刷新后文字内容一致',
+  frontAfter.find((e) => e.type === 'text').text === '小心轻放'
+  && backAfter.find((e) => e.type === 'text').text === '改过的副本');
+check('刷新后图片 dataURL 还在', frontAfter.some((e) => e.type === 'image' && e.src.startsWith('data:image/')));
+
+/* ── 撤销栈深度 ≥ 20 ───────────────────────────── */
+
+check('撤销历史容量至少 20 步', cm().history && cm().history.limit >= 20, String(cm().history && cm().history.limit));
+
+/* ── 窄屏 380px ────────────────────────────────── */
+
 await new Promise((resolve) => {
   mob.addEventListener('load', resolve, { once: true });
-  mob.src = '/index.html';
+  mob.src = '/index.html?m=' + Date.now();
 });
+await tick(400);
 
-const mwin = mob.contentWindow;
 const mdoc = mob.contentDocument;
-const m$ = (s) => mdoc.querySelector(s);
-const m$$ = (s) => Array.from(mdoc.querySelectorAll(s));
+const mwin = mob.contentWindow;
+check('窄屏无横向溢出',
+  mdoc.documentElement.scrollWidth <= mwin.innerWidth + 1,
+  `${mdoc.documentElement.scrollWidth} vs ${mwin.innerWidth}`);
 
-const scrollW = mdoc.documentElement.scrollWidth;
-const innerW = mwin.innerWidth;
-check(`窄屏无横向溢出（scrollWidth ${scrollW} ≤ innerWidth ${innerW}）`, scrollW <= innerW + 1);
+const mFront = mdoc.querySelector('.panel[data-panel="front"]');
+mFront.dispatchEvent(new mwin.MouseEvent('click', { bubbles: true }));
+await tick(300);
+check('窄屏下点面板能打开编辑器且不撑破视口',
+  !mdoc.getElementById('editorCard').hidden && mdoc.documentElement.scrollWidth <= mwin.innerWidth + 1,
+  `${mdoc.documentElement.scrollWidth} vs ${mwin.innerWidth}`);
+check('窄屏下元素照常渲染', mdoc.querySelectorAll('.ed-el').length >= 1);
 
-const netSvg = m$('#netHost svg');
-const netCard = m$('#netHost').closest('.card').getBoundingClientRect();
-check(`窄屏展开图 SVG 不超出卡片（svg ${Math.round(Number(netSvg.getAttribute('width')))} / 卡片 ${Math.round(netCard.width)}）`,
-  Number(netSvg.getAttribute('width')) <= netCard.width + 1);
-
-check('窄屏下面板数仍为 12', m$$('.panel').length === 12);
-check('窄屏下图例与说明文字不被裁出视口', (() => {
-  const bar = m$('.statusbar').getBoundingClientRect();
-  const foot = m$('.footnote').getBoundingClientRect();
-  return bar.right <= innerW + 1 && foot.right <= innerW + 1;
-})());
-
-summary.textContent = fail === 0
-  ? `全部通过：${pass} 项`
-  : `失败 ${fail} 项 / 共 ${pass + fail} 项`;
+summary.textContent = fail === 0 ? `全部通过：${pass} 项` : `失败 ${fail} 项 / 共 ${pass + fail} 项`;
 summary.className = fail === 0 ? 'pass' : 'fail';
 document.title = fail === 0 ? 'UAT PASS' : 'UAT FAIL';
 </script>

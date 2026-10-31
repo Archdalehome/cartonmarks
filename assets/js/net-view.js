@@ -125,7 +125,8 @@ export function renderNet(host, net, opts = {}) {
     root.appendChild(line(X(f.x1), Y(f.y1), X(f.x2), Y(f.y2), { class: 'net-fold' }));
   }
 
-  /* 5. 尺寸线：总宽 / 总高 / L / W / H */
+  /* 5. 尺寸线：总宽 / 总高 / L / W / H（图太小的时候只留总尺寸，避免文字打架） */
+  const compact = drawW < 430;
   dimLine(root, {
     a: { x: X(0), y: Y(0) },
     b: { x: X(net.width), y: Y(0) },
@@ -142,27 +143,29 @@ export function renderNet(host, net, opts = {}) {
     center,
     className: 'is-strong',
   });
-  dimLine(root, {
-    a: { x: X(0), y: Y(net.height) },
-    b: { x: X(net.dims.L), y: Y(net.height) },
-    label: `L ${fmt(net.dims.L)}`,
-    offset: 32,
-    center,
-  });
-  dimLine(root, {
-    a: { x: X(net.dims.L), y: Y(net.height) },
-    b: { x: X(net.dims.L + net.dims.W), y: Y(net.height) },
-    label: `W ${fmt(net.dims.W)}`,
-    offset: 32,
-    center,
-  });
-  dimLine(root, {
-    a: { x: X(net.width), y: Y(net.bodyTop) },
-    b: { x: X(net.width), y: Y(net.bodyBottom) },
-    label: `H ${fmt(net.dims.H)}`,
-    offset: 26,
-    center,
-  });
+  if (!compact) {
+    dimLine(root, {
+      a: { x: X(0), y: Y(net.height) },
+      b: { x: X(net.dims.L), y: Y(net.height) },
+      label: `L ${fmt(net.dims.L)}`,
+      offset: 32,
+      center,
+    });
+    dimLine(root, {
+      a: { x: X(net.dims.L), y: Y(net.height) },
+      b: { x: X(net.dims.L + net.dims.W), y: Y(net.height) },
+      label: `W ${fmt(net.dims.W)}`,
+      offset: 32,
+      center,
+    });
+    dimLine(root, {
+      a: { x: X(net.width), y: Y(net.bodyTop) },
+      b: { x: X(net.width), y: Y(net.bodyBottom) },
+      label: `H ${fmt(net.dims.H)}`,
+      offset: 26,
+      center,
+    });
+  }
 
   host.replaceChildren(root);
 
