@@ -1,9 +1,9 @@
-/**
+﻿/**
  * units.js —— 单位与尺寸校验
  * 内部一律使用毫米（mm）。显示层按当前单位换算，绝不把显示值写进数据。
  */
 
-export const UNIT_FACTORS = { mm: 1, cm: 10 };
+export const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 };
 
 /** 硬边界：超出即视为输入错误，不绘制 */
 export const MIN_MM = 20;
@@ -20,20 +20,22 @@ export function fromMm(mm, unit) {
   return mm / (UNIT_FACTORS[unit] || 1);
 }
 
-/** 显示用数值：mm 取整，cm 保留两位小数 */
+/** 显示用数值：mm 取整，cm / 英寸保留两位小数 */
 export function displayValue(mm, unit) {
-  if (unit === 'cm') return Math.round(fromMm(mm, unit) * 100) / 100;
+  if (unit === 'cm' || unit === 'in') return Math.round(fromMm(mm, unit) * 100) / 100;
   return Math.round(mm);
 }
 
 export function unitSuffix(unit) {
-  return unit === 'cm' ? 'cm' : 'mm';
+  if (unit === 'cm') return 'cm';
+  if (unit === 'in') return 'in';
+  return 'mm';
 }
 
 /**
  * 校验单个尺寸输入。
  * @param {string|number} raw 用户原始输入
- * @param {'mm'|'cm'} unit
+ * @param {'mm'|'cm'|'in'} unit
  * @param {string} name 中文名，用于提示
  * @returns {{ok:boolean, mm?:number, error?:string, warn?:string}}
  */

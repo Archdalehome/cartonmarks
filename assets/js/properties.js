@@ -1,4 +1,4 @@
-/**
+﻿/**
  * properties.js —— 右侧属性面板
  * 纯 DOM 渲染 + 回调，不持有状态。
  */
@@ -59,6 +59,7 @@ export function renderProperties(host, ctx) {
       h('div', { class: 'prop-actions' }, [
         h('button', { type: 'button', class: 'btn', text: '+ 文字', onclick: () => callbacks.addText() }),
         h('button', { type: 'button', class: 'btn', text: '+ 图片', onclick: () => callbacks.addImage() }),
+        h('button', { type: 'button', class: 'btn', text: '+ 线条', onclick: () => callbacks.addLine() }),
         h('button', { type: 'button', class: 'btn btn-ghost', text: '清空本面', onclick: () => callbacks.clear() }),
       ]),
     ]),
@@ -186,6 +187,57 @@ export function renderProperties(host, ctx) {
     );
     const boldInput = section.querySelector('#propBold');
     boldInput.checked = Boolean(selected.bold);
+  }
+
+  if (selected.type === 'line') {
+    const thickness = selected.orientation === 'vertical' ? selected.w : selected.h;
+    section.appendChild(
+      h('div', { class: 'prop-grid' }, [
+        h('div', { class: 'field' }, [
+          h('label', { class: 'label', for: 'propLineOrientation', text: '方向' }),
+          h('select', {
+            id: 'propLineOrientation',
+            onchange: (ev) => callbacks.setLineOrientation(selected.id, ev.target.value),
+          }, [
+            h('option', { value: 'horizontal', text: '横线' }),
+            h('option', { value: 'vertical', text: '竖线' }),
+          ]),
+        ]),
+        h('div', { class: 'field' }, [
+          h('label', { class: 'label', for: 'propLineThickness', text: '粗细（mm）' }),
+          h('input', {
+            id: 'propLineThickness',
+            type: 'number',
+            min: '0.5',
+            max: '50',
+            step: '0.5',
+            value: String(Math.round(thickness * 10) / 10),
+            oninput: (ev) => {
+              const t = Number(ev.target.value);
+              if (!Number.isFinite(t) || t < 0.5 || t > 50) return;
+              callbacks.patch(
+                selected.id,
+                selected.orientation === 'vertical' ? { w: t } : { h: t },
+                `prop-thick-${selected.id}`,
+              );
+            },
+          }),
+        ]),
+      ]),
+    );
+    section.querySelector('#propLineOrientation').value = selected.orientation;
+
+    section.appendChild(
+      h('div', { class: 'field', style: 'margin-top:8px' }, [
+        h('label', { class: 'label', for: 'propLineColor', text: '颜色' }),
+        h('input', {
+          id: 'propLineColor',
+          type: 'color',
+          value: selected.color || '#000000',
+          oninput: (ev) => callbacks.patch(selected.id, { color: ev.target.value }, `prop-color-${selected.id}`),
+        }),
+      ]),
+    );
   }
 
   if (selected.type === 'image') {

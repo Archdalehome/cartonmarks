@@ -1,9 +1,9 @@
-/**
+﻿/**
  * tools/test-units.mjs —— 尺寸输入防呆的断言
  * 用法：node tools/test-units.mjs
  */
 import assert from 'node:assert/strict';
-import { validateDim, toMm, fromMm, displayValue } from '../assets/js/units.js';
+import { validateDim, toMm, fromMm, displayValue, unitSuffix } from '../assets/js/units.js';
 
 let passed = 0;
 function check(name, fn) {
@@ -58,6 +58,24 @@ check('厘米输入会换算成毫米再返回', () => {
   const r = validateDim('60', 'cm', '长 L');
   assert.equal(r.ok, true);
   assert.equal(r.mm, 600);
+});
+
+console.log('英寸');
+
+check('1 in = 25.4 mm', () => assert.equal(toMm(1, 'in'), 25.4));
+check('24 in = 609.6 mm', () => assert.ok(Math.abs(toMm(24, 'in') - 609.6) < 1e-9));
+check('600 mm 在英寸下显示 23.62', () => assert.equal(displayValue(600, 'in'), 23.62));
+check('英寸后缀是 in', () => assert.equal(unitSuffix('in'), 'in'));
+
+check('输入 24 in 校验通过并换算成 609.6 mm', () => {
+  const r = validateDim('24', 'in', '长 L');
+  assert.equal(r.ok, true);
+  assert.ok(Math.abs(r.mm - 609.6) < 1e-9);
+});
+
+check('英寸下同样有最小值/最大值保护', () => {
+  assert.equal(validateDim('0.5', 'in', '长 L').ok, false);
+  assert.equal(validateDim('200', 'in', '长 L').ok, false);
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

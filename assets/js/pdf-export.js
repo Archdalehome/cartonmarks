@@ -61,6 +61,21 @@ function measureImage(src) {
   return promise;
 }
 
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '#000000'));
+  if (!m) return [0, 0, 0];
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** 线条 = 实心矩形，按元素颜色填充 */
+function drawLine(doc, element, dx, dy, scale) {
+  const [r, g, b] = hexToRgb(element.color);
+  doc.setFillColor(r, g, b);
+  doc.setDrawColor(r, g, b);
+  doc.rect(dx, dy, element.w * scale, element.h * scale, 'F');
+}
+
 function imageFormat(src) {
   if (/^data:image\/png/i.test(src)) return 'PNG';
   if (/^data:image\/jpe?g/i.test(src)) return 'JPEG';
@@ -318,6 +333,8 @@ export async function exportPdf({ net, panels, dims, mode = 'sheet', tilePaper =
       const dy = element.ay * drawScale + drawDy;
       if (element.type === 'text') {
         drawText(doc, font, element, dx, dy, drawScale);
+      } else if (element.type === 'line') {
+        drawLine(doc, element, dx, dy, drawScale);
       } else if (element.type === 'image' && element.src) {
         try {
           const info = await measureImage(element.src);

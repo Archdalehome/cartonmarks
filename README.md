@@ -1,4 +1,4 @@
-﻿# Carton Mark · 箱唛设计工具
+# Carton Mark · 箱唛设计工具
 
 纯静态站点（HTML + CSS + 原生 JS，无构建步骤），Cloudflare Pages 直接发布仓库根目录。
 线上地址：https://cartonmarks.pages.dev
@@ -31,6 +31,11 @@
   - 面板列表完全由几何生成（`geometry.registerShapeGeometry`），测试里有假 L 形箱证明扩展点可用
   - robots.txt、404.html、og/meta、PDF 元信息（ASCII Title/Subject 带尺寸）
   - 中文字体 2.1 MB 只在导出时加载，不进首屏
+- **M5 英寸单位 + 线条元素**（已完成）
+  - 单位增加英寸：`1 in = 25.4 mm`，内部仍全毫米，只在 `units.js` 边界换算；显示保留两位小数
+  - 线条元素：横线 / 竖线，默认黑色、粗细 10 mm（可调 0.5–50 mm）
+  - 横线默认长度 = 面板宽度 × 45%，竖线 = 面板高度 × 45%；可拖动、四角缩放，右侧属性面板可改方向 / 粗细 / 颜色 / 坐标尺寸
+  - 线条与文字图片同一套元素模型：撤销/重做、复制到另一面、草稿保存、1:1 PDF 导出全部生效
 
 ## 尺寸口径（一切以真实毫米为准）
 
@@ -104,8 +109,11 @@ project = {
   }
 }
 
-element = { id, type: 'text'|'image', x, y, w, h, rotation,
-            text?, fontSize?, bold?, align?, src? }
+element = { id, type: 'text'|'image'|'line', x, y, w, h, rotation,
+            text?, fontSize?, bold?, align?, src?,
+            orientation?, color? }   // line：horizontal|vertical、#rrggbb
+
+// 线条的包围盒：横线 w=长度、h=粗细；竖线 w=粗细、h=长度
 ```
 
 元素坐标、尺寸、字号一律存毫米，显示时按缩放换算；PDF 导出直接按 1:1 使用同一份数据。

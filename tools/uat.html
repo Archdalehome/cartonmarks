@@ -382,6 +382,72 @@ check('拼版提示强调按 100% 打印',
   docOf().getElementById('printNote').textContent.includes('100%'));
 docOf().getElementById('exportDialog').close();
 
+/* ── M5：英寸与线条 ────────────────────────────── */
+
+click($('.panel[data-panel="front"]'));
+await tick(200);
+click(docOf().getElementById('addLineBtn'));
+await tick(200);
+check('线条弹层能打开', docOf().getElementById('elementDialog').open === true
+  && docOf().getElementById('linePane').hidden === false);
+
+docOf().getElementById('elementForm').requestSubmit();
+await tick(250);
+
+let lineEl = cm().state.panels.front.elements.find((e) => e.type === 'line');
+check('横线默认粗细 10 mm、长度 = 面板宽 × 45%（600 → 270）',
+  Boolean(lineEl) && Math.abs(lineEl.h - 10) < 1e-6 && Math.abs(lineEl.w - 270) < 0.01,
+  lineEl ? `${lineEl.w} × ${lineEl.h}` : '没加上');
+
+const thickInput = docOf().getElementById('propLineThickness');
+thickInput.value = '20';
+fire(thickInput, 'input');
+await tick(200);
+lineEl = cm().state.panels.front.elements.find((e) => e.type === 'line');
+check('属性面板改粗细 20 mm 生效', Math.abs(lineEl.h - 20) < 0.01, String(lineEl.h));
+
+const orientSelect = docOf().getElementById('propLineOrientation');
+orientSelect.value = 'vertical';
+fire(orientSelect, 'change');
+await tick(200);
+lineEl = cm().state.panels.front.elements.find((e) => e.type === 'line');
+check('切换竖线后长宽互换（20 粗 × 270 长）',
+  lineEl.orientation === 'vertical' && Math.abs(lineEl.w - 20) < 0.01 && Math.abs(lineEl.h - 270) < 0.01,
+  `${lineEl.w} × ${lineEl.h}`);
+
+const lineNode = $('.ed-el[data-id="' + lineEl.id + '"]');
+const lb = lineNode.getBoundingClientRect();
+pointer(lineNode, 'pointerdown', lb.left + lb.width / 2, lb.top + lb.height / 2, 5);
+const lineNode2 = $('.ed-el[data-id="' + lineEl.id + '"]');
+pointer(lineNode2, 'pointermove', lb.left + lb.width / 2 + 30, lb.top + lb.height / 2 + 20, 5);
+pointer(lineNode2, 'pointerup', lb.left + lb.width / 2 + 30, lb.top + lb.height / 2 + 20, 5);
+await tick(150);
+check('线条能拖动且不出面板',
+  lineEl.x >= 0 && lineEl.y >= 0 && lineEl.x + lineEl.w <= 600.001 && lineEl.y + lineEl.h <= 300.001);
+
+const pdfWithLine = await cm().exportPdf({ compress: false });
+check('带线条也能正常导出 PDF', pdfWithLine.pageCount >= 1 && pdfWithLine.blob.size > 5000, `${pdfWithLine.blob.size} bytes`);
+
+// 英寸
+click(docOf().querySelector('[data-unit="in"]'));
+await tick(250);
+check('切英寸后显示 23.62 / 15.75 / 11.81',
+  docOf().getElementById('dimL').value === '23.62'
+  && docOf().getElementById('dimW').value === '15.75'
+  && docOf().getElementById('dimH').value === '11.81',
+  [docOf().getElementById('dimL').value, docOf().getElementById('dimW').value, docOf().getElementById('dimH').value].join('/'));
+
+const dimLIn = docOf().getElementById('dimL');
+dimLIn.value = '24';
+fire(dimLIn, 'input');
+await tick(250);
+check('输入 24 in → 内部 609.6 mm', Math.abs(cm().state.dims.L - 609.6) < 1e-6, String(cm().state.dims.L));
+check('英寸下展开图仍按毫米重算（2×609.6 + 2×400 = 2019.2）',
+  Math.abs(cm().getNet().width - 2019.2) < 0.01, String(cm().getNet().width));
+
+click(docOf().querySelector('[data-unit="mm"]'));
+await tick(200);
+
 /* ── 窄屏 380px ────────────────────────────────── */
 
 await new Promise((resolve) => {

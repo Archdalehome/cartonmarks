@@ -1,7 +1,9 @@
-﻿/**
- * editor.js 鈥斺€?闈㈡澘鏀惧ぇ缂栬緫鐢诲竷
+/**
+ * editor.js —— 面板放大编辑画布
  *
- * 鑱岃矗锛氭妸鏌愪竴闈㈢殑鍏冪礌鎸夌湡瀹炴绫?脳 缂╂斁鐢诲嚭鏉ワ紝澶勭悊閫変腑銆佹嫋鍔ㄣ€佸洓瑙掔缉鏀俱€佸榻愯緟鍔╃嚎銆? * 鍏冪礌鍧愭爣濮嬬粓鏄绫筹紝杩欓噷鍙湪璇诲啓 DOM 鏃朵箻 scale銆? */
+ * 职责：把某一面的元素按真实毫米 × 缩放画出来，处理选中、拖动、四角缩放、对齐辅助线。
+ * 元素坐标始终是毫米，这里只在读写 DOM 时乘 scale。
+ */
 
 import { clamp } from './elements.js';
 
@@ -102,13 +104,18 @@ export function createEditor({ host, callbacks }) {
       t.style.fontWeight = el.bold ? '700' : '400';
       t.style.textAlign = el.align || 'left';
       node.appendChild(t);
-    } else {
+    } else if (el.type === 'image') {
       const img = document.createElement('img');
       img.className = 'ed-img';
       img.src = el.src;
-      img.alt = '绠卞敍鍥剧墖';
+      img.alt = '箱唛图片';
       img.draggable = false;
       node.appendChild(img);
+    } else if (el.type === 'line') {
+      const bar = document.createElement('div');
+      bar.className = 'ed-line';
+      bar.style.backgroundColor = el.color || '#000000';
+      node.appendChild(bar);
     }
 
     node.addEventListener('pointerdown', (ev) => startDrag(ev, el));
@@ -194,7 +201,7 @@ export function createEditor({ host, callbacks }) {
     node.addEventListener('pointercancel', finish);
   }
 
-  /* 鈹€鈹€ 鍥涜缂╂斁 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+  /* ── 四角缩放 ─────────────────────────────────── */
 
   function startResize(ev, el, corner) {
     if (ev.button !== 0) return;
@@ -340,7 +347,7 @@ export function createEditor({ host, callbacks }) {
     if (guideH) guideH.style.display = 'none';
   }
 
-  /* 鈹€鈹€ 閿洏寰皟 / 鍒犻櫎 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+  /* ── 键盘微调 / 删除 ──────────────────────────── */
 
   function nudge(dx, dy) {
     const el = getSelected();

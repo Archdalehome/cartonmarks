@@ -426,6 +426,7 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   pointer-events: none;
 }
 .ed-img { width: 100%; height: 100%; object-fit: fill; display: block; pointer-events: none; }
+.ed-line { width: 100%; height: 100%; pointer-events: none; }
 
 .ed-handle {
   position: absolute;

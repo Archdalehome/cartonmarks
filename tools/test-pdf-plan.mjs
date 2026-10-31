@@ -184,4 +184,25 @@ check('summarize 支持拼版模式', () => {
   assert.ok(s.tilePlan && s.tilePlan.tiles.length === 15);
 });
 
+console.log('线条元素');
+
+check('线条参与页计划：绝对坐标 + 不占图片计数', () => {
+  const linePanels = {
+    front: {
+      label: '前箱唛',
+      elements: [{ id: 'l1', type: 'line', x: 100, y: 50, w: 270, h: 10, orientation: 'horizontal', color: '#000000' }],
+    },
+  };
+  const pages = collectPages({ net, panels: linePanels, mode: 'sheet' });
+  const line = pages[0].elements[0];
+  assert.equal(line.ax, net.panels.front.x + 100);
+  assert.equal(line.ay, net.panels.front.y + 50);
+  assert.equal(line.w, 270);
+  assert.equal(line.h, 10);
+
+  const s = summarize({ net, panels: linePanels, mode: 'sheet' });
+  assert.equal(s.elementCount, 1);
+  assert.equal(s.imageCount, 0);
+});
+
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

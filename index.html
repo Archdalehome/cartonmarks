@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -27,7 +27,7 @@
   <div class="topbar-actions">
     <button type="button" class="btn btn-ghost btn-icon" id="undoBtn" title="撤销（Ctrl+Z）" aria-label="撤销" disabled>↶</button>
     <button type="button" class="btn btn-ghost btn-icon" id="redoBtn" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled>↷</button>
-    <span class="tag" id="stageTag">M4 · 收尾适配</span>
+    <span class="tag" id="stageTag">M5 · 英寸与线条</span>
     <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>
     <button type="button" class="btn btn-primary" id="exportBtn">导出 PDF</button>
   </div>
@@ -46,6 +46,7 @@
     <div class="segmented" id="unitToggle" role="group" aria-label="单位切换">
       <button type="button" data-unit="mm" class="is-active" aria-pressed="true">毫米 mm</button>
       <button type="button" data-unit="cm" aria-pressed="false">厘米 cm</button>
+      <button type="button" data-unit="in" aria-pressed="false">英寸 in</button>
     </div>
   </div>
 
@@ -121,6 +122,7 @@
     <div class="editor-tools">
       <button type="button" class="btn" id="addTextBtn">+ 文字</button>
       <button type="button" class="btn" id="addImageBtn">+ 图片</button>
+      <button type="button" class="btn" id="addLineBtn">+ 线条</button>
       <span class="divider" aria-hidden="true"></span>
       <label class="label" for="copyTarget">复制到</label>
       <select id="copyTarget" class="select select--sm"></select>
@@ -184,6 +186,7 @@
       <div class="tabs" id="elementTabs" role="tablist">
         <button type="button" role="tab" data-tab="text" class="is-active" aria-selected="true">文字</button>
         <button type="button" role="tab" data-tab="image" aria-selected="false">图片</button>
+        <button type="button" role="tab" data-tab="line" aria-selected="false">线条</button>
       </div>
 
       <div id="textPane">
@@ -209,6 +212,27 @@
             <label class="check"><input type="checkbox" id="elementBold"> <span>加粗</span></label>
           </div>
         </div>
+      </div>
+
+      <div id="linePane" hidden>
+        <div class="row3">
+          <div class="field">
+            <label class="label" for="lineOrientation">方向</label>
+            <select id="lineOrientation">
+              <option value="horizontal">横线</option>
+              <option value="vertical">竖线</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="lineThickness">粗细（mm）</label>
+            <input id="lineThickness" type="number" min="0.5" max="50" step="0.5" value="10">
+          </div>
+          <div class="field">
+            <label class="label" for="lineColor">颜色</label>
+            <input id="lineColor" type="color" value="#000000" class="color-input">
+          </div>
+        </div>
+        <p class="hint">横线默认长度 = 面板宽度 × 45%，竖线默认长度 = 面板高度 × 45%；加完可拖动、缩放，或在右侧属性面板改数值。</p>
       </div>
 
       <div id="imagePane" hidden>

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * project.js —— 项目数据模型
  *
  * 面板列表不在这里写死：createPanels(net) 完全按几何结果生成。
@@ -43,20 +43,22 @@ function sanitizeElements(list) {
   const out = [];
   for (const el of list) {
     if (!el || typeof el !== 'object') continue;
-    if (el.type !== 'text' && el.type !== 'image') continue;
+    if (!['text', 'image', 'line'].includes(el.type)) continue;
     if (!Number.isFinite(Number(el.w)) || !Number.isFinite(Number(el.h))) continue;
     out.push({
       id: String(el.id || `el-${Math.random().toString(36).slice(2, 9)}`),
       type: el.type,
       x: Number(el.x) || 0,
       y: Number(el.y) || 0,
-      w: Math.max(1, Number(el.w) || 1),
-      h: Math.max(1, Number(el.h) || 1),
+      w: Math.max(el.type === 'line' ? 0.5 : 1, Number(el.w) || 1),
+      h: Math.max(el.type === 'line' ? 0.5 : 1, Number(el.h) || 1),
       rotation: Number(el.rotation) || 0,
       text: typeof el.text === 'string' ? el.text : '',
       fontSize: Number(el.fontSize) || 10,
       bold: Boolean(el.bold),
       align: ['left', 'center', 'right'].includes(el.align) ? el.align : 'left',
+      orientation: el.orientation === 'vertical' ? 'vertical' : 'horizontal',
+      color: /^#[0-9a-f]{6}$/i.test(String(el.color || '')) ? el.color : '#000000',
       src: typeof el.src === 'string' ? el.src : '',
     });
   }

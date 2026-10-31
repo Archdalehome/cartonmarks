@@ -21,7 +21,7 @@ import { renderIso } from './iso-view.js';
 import { createEditor } from './editor.js';
 import { renderProperties, syncNumberFields } from './properties.js';
 import { History } from './history.js';
-import { clampElement, createTextElement, createImageElement, deepCopyElement } from './elements.js';
+import { clampElement, createTextElement, createImageElement, createLineElement, deepCopyElement } from './elements.js';
 import { validateDim, displayValue, unitSuffix, fmt } from './units.js';
 import { exportPdf, imageReport } from './pdf-export.js';
 import { summarize, exportFileName, MIN_DPI } from './pdf-plan.js';
@@ -69,6 +69,11 @@ const dom = {
   propsPanel: el('propsPanel'),
   addTextBtn: el('addTextBtn'),
   addImageBtn: el('addImageBtn'),
+  addLineBtn: el('addLineBtn'),
+  linePane: el('linePane'),
+  lineOrientation: el('lineOrientation'),
+  lineThickness: el('lineThickness'),
+  lineColor: el('lineColor'),
   copyTarget: el('copyTarget'),
   copyOverwriteBtn: el('copyOverwriteBtn'),
   copyAppendBtn: el('copyAppendBtn'),
@@ -269,7 +274,7 @@ function applyUnitChrome() {
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-pressed', String(on));
   });
-  for (const k of DIM_KEYS) dom.inputs[k].step = state.unit === 'cm' ? '0.1' : '1';
+  for (const k of DIM_KEYS) dom.inputs[k].step = state.unit === 'mm' ? '1' : '0.1';
 }
 
 function switchUnit(unit) {
@@ -362,6 +367,8 @@ function renderProps() {
       replaceImage,
       addText: () => openElementDialog('text'),
       addImage: () => openElementDialog('image'),
+      addLine: () => openElementDialog('line'),
+      setLineOrientation,
       clear: clearPanel,
     },
   });
@@ -430,6 +437,30 @@ function removeElement(id) {
   pushHistory();
   persistSoon();
   updateSelectionInfo();
+}
+
+/** 横线/竖线切换：保持中心点，长度和粗细互换方向 */
+function setLineOrientation(id, orientation) {
+  if (!state.selected || !lastNet) return;
+  const element = currentElements().find((e) => e.id === id);
+  if (!element || element.type !== 'line') return;
+  const geo = lastNet.panels[state.selected];
+  const cx = element.x + element.w / 2;
+  const cy = element.y + element.h / 2;
+  const length = Math.max(element.w, element.h);
+  const thickness = Math.max(0.5, Math.min(element.w, element.h));
+  const vertical = orientation === 'vertical';
+
+  element.orientation = vertical ? 'vertical' : 'horizontal';
+  element.w = vertical ? thickness : length;
+  element.h = vertical ? length : thickness;
+  element.x = Math.min(Math.max(cx - element.w / 2, 0), Math.max(0, geo.w - element.w));
+  element.y = Math.min(Math.max(cy - element.h / 2, 0), Math.max(0, geo.h - element.h));
+
+  editor.render();
+  renderProps();
+  pushHistory();
+  persistSoon();
 }
 
 async function replaceImage(id, file) {
@@ -512,13 +543,14 @@ function copyPanelTo(mode) {
 /* ── 新建元素弹层 ───────────────────────────────── */
 
 function setDialogTab(tab) {
-  const isImage = tab === 'image';
-  dom.elementDialog.dataset.type = isImage ? 'image' : 'text';
-  dom.elementTitle.textContent = isImage ? '新建图片' : '新建文字';
-  dom.textPane.hidden = isImage;
-  dom.imagePane.hidden = !isImage;
+  const type = tab === 'image' ? 'image' : tab === 'line' ? 'line' : 'text';
+  dom.elementDialog.dataset.type = type;
+  dom.elementTitle.textContent = type === 'image' ? '新建图片' : type === 'line' ? '新建线条' : '新建文字';
+  dom.textPane.hidden = type !== 'text';
+  dom.imagePane.hidden = type !== 'image';
+  dom.linePane.hidden = type !== 'line';
   dom.elementTabs.querySelectorAll('button').forEach((b) => {
-    const on = b.dataset.tab === (isImage ? 'image' : 'text');
+    const on = b.dataset.tab === type;
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-selected', String(on));
   });
@@ -532,6 +564,9 @@ function openElementDialog(tab = 'text') {
   dom.elementFontSize.value = '20';
   dom.elementBold.checked = false;
   dom.elementAlign.value = 'left';
+  dom.lineOrientation.value = 'horizontal';
+  dom.lineThickness.value = '10';
+  dom.lineColor.value = '#000000';
   dom.elementFile.value = '';
   dom.imagePreview.replaceChildren();
   pendingImage = null;
@@ -553,7 +588,9 @@ function submitElementDialog(ev) {
     closeElementDialog();
     return;
   }
-  const type = dom.elementDialog.dataset.type === 'image' ? 'image' : 'text';
+  const type = ['image', 'line'].includes(dom.elementDialog.dataset.type)
+    ? dom.elementDialog.dataset.type
+    : 'text';
   const geo = lastNet.panels[state.selected];
 
   if (type === 'text') {
@@ -575,6 +612,20 @@ function submitElementDialog(ev) {
         fontSize,
         bold: dom.elementBold.checked,
         align: dom.elementAlign.value,
+      }),
+    );
+  } else if (type === 'line') {
+    const thickness = Number(dom.lineThickness.value);
+    if (!Number.isFinite(thickness) || thickness < 0.5 || thickness > 50) {
+      dom.elementError.textContent = '粗细需在 0.5–50 mm 之间';
+      dom.lineThickness.focus();
+      return;
+    }
+    addElement(
+      createLineElement(geo.w, geo.h, {
+        orientation: dom.lineOrientation.value,
+        thickness,
+        color: dom.lineColor.value,
       }),
     );
   } else {
@@ -836,6 +887,7 @@ function bindEvents() {
   dom.closeEditorBtn.addEventListener('click', closeEditor);
   dom.addTextBtn.addEventListener('click', () => openElementDialog('text'));
   dom.addImageBtn.addEventListener('click', () => openElementDialog('image'));
+  dom.addLineBtn.addEventListener('click', () => openElementDialog('line'));
   dom.copyOverwriteBtn.addEventListener('click', () => copyPanelTo('overwrite'));
   dom.copyAppendBtn.addEventListener('click', () => copyPanelTo('append'));
   dom.clearPanelBtn.addEventListener('click', clearPanel);

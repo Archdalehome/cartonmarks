@@ -1,4 +1,4 @@
-/**
+﻿/**
  * elements.js —— 箱唛元素的纯数据操作
  *
  * 所有坐标、尺寸、字号都是毫米（相对面板左上角），换算是视图层的事。
@@ -15,10 +15,18 @@ export function clamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
 }
 
+/** 线条元素的默认值与范围（毫米） */
+export const LINE_DEFAULT_THICKNESS = 10;
+export const LINE_MIN_THICKNESS = 0.5;
+export const LINE_MAX_THICKNESS = 50;
+export const LINE_LENGTH_RATIO = 0.45;
+export const LINE_DEFAULT_COLOR = '#000000';
+
 /** 把元素夹在面板边界内（尺寸过大先缩到面板大小） */
 export function clampElement(el, panelW, panelH) {
-  el.w = clamp(Number(el.w) || 0, 3, panelW);
-  el.h = clamp(Number(el.h) || 0, 3, panelH);
+  const minSide = el.type === 'line' ? LINE_MIN_THICKNESS : 3;
+  el.w = clamp(Number(el.w) || 0, minSide, panelW);
+  el.h = clamp(Number(el.h) || 0, minSide, panelH);
   el.x = clamp(Number(el.x) || 0, 0, Math.max(0, panelW - el.w));
   el.y = clamp(Number(el.y) || 0, 0, Math.max(0, panelH - el.h));
   el.rotation = Number(el.rotation) || 0;
@@ -82,6 +90,39 @@ export function createImageElement(panelW, panelH, data = {}) {
   return clampElement(el, panelW, panelH);
 }
 
+/**
+ * 线条元素：横线 / 竖线，默认黑色、粗细 10 mm。
+ * 横线长度取所在面板宽度的 45%，竖线取高度的 45%；w/h 仍是毫米包围盒。
+ */
+export function createLineElement(panelW, panelH, data = {}) {
+  const orientation = data.orientation === 'vertical' ? 'vertical' : 'horizontal';
+  const thickness = clamp(
+    Number(data.thickness) || LINE_DEFAULT_THICKNESS,
+    LINE_MIN_THICKNESS,
+    Math.min(LINE_MAX_THICKNESS, orientation === 'horizontal' ? panelH : panelW),
+  );
+  const length = orientation === 'horizontal' ? panelW * LINE_LENGTH_RATIO : panelH * LINE_LENGTH_RATIO;
+  const w = orientation === 'horizontal' ? length : thickness;
+  const h = orientation === 'horizontal' ? thickness : length;
+
+  return clampElement({
+    id: newId('line'),
+    type: 'line',
+    x: (panelW - w) / 2,
+    y: (panelH - h) / 2,
+    w,
+    h,
+    rotation: 0,
+    orientation,
+    color: /^#[0-9a-f]{6}$/i.test(String(data.color || '')) ? data.color : LINE_DEFAULT_COLOR,
+    text: '',
+    fontSize: 0,
+    bold: false,
+    align: 'left',
+    src: '',
+  }, panelW, panelH);
+}
+
 /** 深拷贝并换新 id —— 复制到别的面时用，改副本不能影响原件 */
 export function deepCopyElement(el) {
   return { ...JSON.parse(JSON.stringify(el)), id: newId(el.type) };
@@ -92,9 +133,15 @@ export function elementLabel(el) {
     const t = (el.text || '').replace(/\s+/g, ' ').trim();
     return t.length > 18 ? `${t.slice(0, 18)}…` : t || '文字';
   }
+  if (el.type === 'line') {
+    const thickness = el.orientation === 'vertical' ? el.w : el.h;
+    return `${el.orientation === 'vertical' ? '竖线' : '横线'} · ${Math.round(thickness * 10) / 10} mm`;
+  }
   return `${Math.round(el.w)} × ${Math.round(el.h)} mm`;
 }
 
 export function elementKindLabel(el) {
-  return el.type === 'text' ? '文字' : '图片';
+  if (el.type === 'text') return '文字';
+  if (el.type === 'line') return '线条';
+  return '图片';
 }
