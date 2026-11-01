@@ -1,112 +1,63 @@
 /**
  * storage.js —— 草稿存储与图片压缩
  *
- * localStorage 只有 5MB 左右，图片一多就会爆；
- * 写不进去时自动改存 IndexedDB（容量大得多），并在 localStorage 里留一个标记。
+ * 草稿放 sessionStorage：刷新还在，关掉标签页 / 浏览器就没了（用户 2026-11-01 要求）。
+ * 早期版本把草稿放 localStorage（图片太大时还落过 IndexedDB），启动时会把那些旧键和旧库清掉，
+ * 避免老数据阴魂不散。
  */
 
 import { DRAFT_KEY, parseDraft } from './project.js';
 
-const IDB_FLAG = `${DRAFT_KEY}.idb`;
-const DB_NAME = 'cartonmark';
-const DB_VERSION = 1;
-const STORE = 'drafts';
-const IDB_KEY = 'project';
+const LEGACY_IDB_FLAG = `${DRAFT_KEY}.idb`;
+const LEGACY_DB_NAME = 'cartonmark';
 
-let dbPromise = null;
-
-function openDb() {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('当前浏览器不支持 IndexedDB'));
-      return;
-    }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error('IndexedDB 打开失败'));
-  });
-  return dbPromise;
+function purgeLegacyDbOnce() {
+  if (dbPurged) return;
+  dbPurged = true;
+  try {
+    if (typeof indexedDB !== 'undefined') indexedDB.deleteDatabase(LEGACY_DB_NAME);
+  } catch (err) {
+    console.warn('清理旧 IndexedDB 草稿失败', err);
+  }
 }
 
-async function idbPut(value) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(value, IDB_KEY);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error || new Error('IndexedDB 写入失败'));
-  });
+/** 清掉旧版 localStorage 草稿键（每次启动都清，防止老数据回来） */
+function purgeLegacyDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(LEGACY_IDB_FLAG);
+  } catch (err) {
+    console.warn('清理旧 localStorage 草稿失败', err);
+  }
 }
 
-async function idbGet() {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).get(IDB_KEY);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error || new Error('IndexedDB 读取失败'));
-  });
-}
+let dbPurged = false;
 
 /**
- * 保存草稿：优先 localStorage；写满自动落 IndexedDB。
- * @returns {Promise<'local'|'idb'|'none'>}
+ * 保存草稿到 sessionStorage。
+ * @returns {Promise<'session'|'none'>}
  */
 export async function saveProject(payload) {
-  const json = JSON.stringify(payload);
+  purgeLegacyDraft();
+  purgeLegacyDbOnce();
   try {
-    localStorage.setItem(DRAFT_KEY, json);
-    try {
-      localStorage.removeItem(IDB_FLAG);
-    } catch {
-      /* ignore */
-    }
-    return 'local';
-  } catch {
-    try {
-      await idbPut(payload);
-      try {
-        localStorage.setItem(IDB_FLAG, '1');
-      } catch {
-        /* ignore */
-      }
-      return 'idb';
-    } catch (err) {
-      console.error('草稿写入 IndexedDB 也失败了，本次改动没保存', err);
-      return 'none';
-    }
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+    return 'session';
+  } catch (err) {
+    console.error('草稿写入 sessionStorage 失败（可能是图片太大），本次改动没保存', err);
+    return 'none';
   }
 }
 
-/** 读取草稿：先看标记，决定从 IndexedDB 还是 localStorage 读 */
+/** 读取草稿：只认 sessionStorage，新标签页/重开浏览器是空的 */
 export async function loadProject() {
-  let fromIdb = false;
+  purgeLegacyDraft();
+  purgeLegacyDbOnce();
   try {
-    fromIdb = localStorage.getItem(IDB_FLAG) === '1';
-  } catch {
-    fromIdb = false;
-  }
-
-  if (fromIdb) {
-    try {
-      const data = await idbGet();
-      const parsed = parseDraft(data);
-      if (parsed) return parsed;
-    } catch (err) {
-      console.warn('IndexedDB 读取失败，回落到 localStorage', err);
-    }
-  }
-
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = sessionStorage.getItem(DRAFT_KEY);
     if (raw) return parseDraft(JSON.parse(raw));
   } catch (err) {
-    console.warn('localStorage 草稿读取失败', err);
+    console.warn('sessionStorage 草稿读取失败', err);
   }
   return null;
 }

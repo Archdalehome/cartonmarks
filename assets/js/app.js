@@ -1021,9 +1021,7 @@ async function persistNow() {
   });
   const where = await saveProject(payload);
   if (where === 'none') {
-    showToast('本地存储已满，草稿未能保存');
-  } else if (where === 'idb' && lastStorage !== 'idb') {
-    showToast('图片较大，草稿已改存浏览器 IndexedDB');
+    showToast('图片太大，草稿没能保存（关掉页面会丢）');
   }
   lastStorage = where;
 }
@@ -1142,13 +1140,19 @@ function bindEvents() {
   });
 
   dom.resetBtn.addEventListener('click', () => {
+    // 重置 = 尺寸回到当前箱型示例 + 清空所有箱唛内容（用户 2026-11-01 要求）
     state.dims = { ...DIM_DEFAULTS };
+    for (const panel of Object.values(state.panels)) {
+      if (panel && Array.isArray(panel.elements)) panel.elements = [];
+    }
+    state.selectedElement = null;
+    closeEditor();
     writeInputsFromState();
     showNotice([]);
     render();
     pushHistory();
     persistSoon();
-    showToast('已恢复示例尺寸');
+    showToast('已清空箱唛内容，尺寸恢复为示例');
   });
 
   dom.helpBtn.addEventListener('click', () => {

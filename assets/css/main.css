@@ -819,3 +819,5 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   .brand { flex: 0 0 auto; }
   .brand-text h1 { white-space: nowrap; }
 }
+/* Logo：直接显示图片自带的圆角，不再套 border-radius */
+.brand-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
