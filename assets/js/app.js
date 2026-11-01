@@ -1514,6 +1514,14 @@ function bindEvents() {
   dom.elementFile.addEventListener('change', onImageFileChanged);
 
   document.addEventListener('keydown', onKeyDown);
+  // 点编辑器卡片以外的任何地方 → 取消元素选中（弹层里点不算，避免打断新建/保存流程）
+  document.addEventListener('click', (ev) => {
+    if (!state.selectedElement) return;
+    const t = ev.target;
+    if (dom.editorCard && dom.editorCard.contains(t)) return;
+    if (t && t.closest && t.closest('dialog')) return;
+    editor.select(null);
+  });
 
   window.addEventListener('resize', scheduleRender);
   let lastWidth = dom.netHost.clientWidth;

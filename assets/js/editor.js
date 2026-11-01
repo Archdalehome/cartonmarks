@@ -1,4 +1,4 @@
-﻿/**
+/**
  * editor.js —— 面板放大编辑画布
  *
  * 职责：把某一面的元素按真实毫米 × 缩放画出来，处理选中、拖动、四角缩放、对齐辅助线。
@@ -89,10 +89,12 @@ export function createEditor({ host, callbacks }) {
 
     canvas.addEventListener('click', (ev) => {
       if (ev.target !== canvas) return;
+      // 已经选中元素时，点空白只取消选中，不再弹「新建元素」
       if (selectedId) {
         selectedId = null;
         callbacks.onSelectionChange(null);
         render();
+        return;
       }
       callbacks.onRequestNew();
     });
