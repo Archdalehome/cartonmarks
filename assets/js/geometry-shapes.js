@@ -437,8 +437,9 @@ export function computeIsoShape(dims, shapeId) {
       ...(shapeId === 'lshape'
         ? {
             // 台阶两个顶面上的 W(前) / W(后)
-            Wfront: ['b' + at(idx(W - Wf, Hf), iF), 'b' + at(idx(W, Hf), iF)],
-            Wback: ['b' + at(idx(0, Hb), iB), 'b' + at(idx(W - Wf, Hb), iB)],
+            // 锚点放在箱体左侧那一端（X=0），引线才能只往左走、不横穿箱体
+            Wfront: ['a' + at(idx(W - Wf, Hf), iF), 'a' + at(idx(W, Hf), iF)],
+            Wback: ['a' + at(idx(0, Hb), iB), 'a' + at(idx(W - Wf, Hb), iB)],
           }
         : {}),
     },

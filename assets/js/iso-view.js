@@ -7,6 +7,38 @@ import { svgEl, node, ensureDefs, line, textEl, pathEl, dimLine, recordLabel, co
 import { computeIso } from './geometry.js';
 import { fmtLength } from './units.js';
 
+/** 凸包（Andrew monotone chain），用来判断引线有没有横穿箱体 */
+export function convexHull(points) {
+  const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i -= 1) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+
+/** 凸包在某个 y 上的左边界 x（引线要从这里往左画，才算在箱体外面） */
+export function hullLeftX(hull, y) {
+  let best = Infinity;
+  for (let i = 0; i < hull.length; i += 1) {
+    const p = hull[i];
+    const q = hull[(i + 1) % hull.length];
+    if ((p.y - y) * (q.y - y) <= 0 && p.y !== q.y) {
+      const x = p.x + ((q.x - p.x) * (y - p.y)) / (q.y - p.y);
+      if (x < best) best = x;
+    }
+  }
+  return best === Infinity ? -Infinity : best;
+}
+
 const PAD_X = 54;
 const PAD_Y = 38;
 
@@ -41,6 +73,7 @@ export function renderIso(host, input, opts = {}) {
     x: iso.corners[id].x * scale + ox,
     y: iso.corners[id].y * scale + oy,
   });
+  const hull = convexHull(Object.keys(iso.corners).map(P));
 
   /* 1. 可见面浅色填充，让线稿有体积 */
   for (const face of iso.faces) {
@@ -87,13 +120,14 @@ export function renderIso(host, input, opts = {}) {
     dimLine(root, { a, b, label: item.label, offset: item.offset, center });
   }
 
-  // 左侧外引标注：W(前)/W(后) 平行于顶面棱，H(前) 用另一条引线指到左下角外
+  // 左侧外引标注：从被标棱的两端往左牵一条细虚线到尺寸线为止，再在左侧竖直连起来
   const screenX = (id) => P(id).x;
   const allX = Object.keys(iso.corners).map(screenX);
   const minScreenX = Math.min(...allX);
+  const extLines = [];
   /**
-   * 把某条棱的尺寸线整体平移到图形左侧外面用细虚线引出去。
-   * labelAt: 文字落在这条尺寸线上的位置（0..1），用来把两条平行标注错开。
+   * @param {number} targetX 尺寸线所在的屏幕 x（在箱体左侧外面）
+   * @param {number} labelAt 文字落在尺寸线上的位置（0..1），用来把相邻标注错开
    */
   const dimOutside = (key, label, targetX, labelAt = 0.5) => {
     const anchor = iso.anchors[key];
@@ -101,11 +135,20 @@ export function renderIso(host, input, opts = {}) {
     const a = P(anchor[0]);
     const b = P(anchor[1]);
     if (!a || !b) return;
-    const dx = targetX - (a.x + b.x) / 2;
-    const a2 = { x: a.x + dx, y: a.y };
-    const b2 = { x: b.x + dx, y: b.y };
-    root.appendChild(line(a.x, a.y, a2.x, a2.y, { class: 'dim-ext' })); // 延长线（细虚线）
-    root.appendChild(line(b.x, b.y, b2.x, b2.y, { class: 'dim-ext' }));
+    // 延长线：只往左走，并且从箱体轮廓外面才开始画，避免虚线横穿箱体
+    const a2 = { x: targetX, y: a.y };
+    const b2 = { x: targetX, y: b.y };
+    for (const [from, to] of [
+      [a, a2],
+      [b, b2],
+    ]) {
+      const startX = Math.min(from.x, hullLeftX(hull, from.y) - 2);
+      if (startX <= to.x + 1) continue; // 太短就不画，免得贴着箱体
+      const el2 = line(startX, from.y, to.x, from.y, { class: 'dim-ext' });
+      root.appendChild(el2);
+      extLines.push({ x1: startX, y1: from.y, x2: to.x, y2: from.y });
+    }
+    // 尺寸线：竖直落在左侧，把两条延长线连起来，箭头朝内
     root.appendChild(
       line(a2.x, a2.y, b2.x, b2.y, {
         class: 'dim-line',
@@ -113,29 +156,30 @@ export function renderIso(host, input, opts = {}) {
         'marker-end': 'url(#cm-dim-arrow)',
       }),
     );
-    // 文字垂直于尺寸线方向让开一点，压在上方
-    const isVerticalLine = Math.abs(a2.x - b2.x) < 1;
-    const lx = a2.x + (b2.x - a2.x) * labelAt + (isVerticalLine ? -8 : 0);
-    const ly = a2.y + (b2.y - a2.y) * labelAt - (isVerticalLine ? 0 : 7);
+    // 文字竖排压在尺寸线外侧
+    const lx = targetX - 8;
+    const ly = a2.y + (b2.y - a2.y) * labelAt;
     root.appendChild(
       textEl(lx, ly, label, {
         class: 'dim-text',
         'text-anchor': 'middle',
         'dominant-baseline': 'middle',
+        transform: `rotate(-90 ${lx} ${ly})`,
       }),
     );
-    recordLabel(root, label, lx, ly, isVerticalLine ? -90 : 0);
+    recordLabel(root, label, lx, ly, -90);
   };
   if (iso.anchors.Wback) {
-    // 两条平行标注一个靠上、一个靠下，避免文字包围盒相交
-    dimOutside('Wback', `W(后) ${fmtLength(dims.Wback, unit)}`, minScreenX - 96, 0.2);
+    dimOutside('Wback', `W(后) ${fmtLength(dims.Wback, unit)}`, minScreenX - 96, 0.25);
   }
   if (iso.anchors.Wfront) {
-    dimOutside('Wfront', `W(前) ${fmtLength(dims.Wfront, unit)}`, minScreenX - 96, 0.85);
+    dimOutside('Wfront', `W(前) ${fmtLength(dims.Wfront, unit)}`, minScreenX - 96, 0.8);
   }
   if (hasFront && iso.anchors.H) {
     dimOutside('H', `H(前) ${fmtLength(dims.Hfront, unit)}`, minScreenX - 44, 0.5);
   }
+  root.__extLines = extLines;
+  root.__hull = hull;
 
   host.replaceChildren(root);
   return root;

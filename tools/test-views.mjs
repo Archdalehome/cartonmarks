@@ -10,7 +10,7 @@ installDom();
 
 const { computeNet, registerShapeGeometry } = await import('../assets/js/geometry.js');
 const { renderNet } = await import('../assets/js/net-view.js');
-const { renderIso } = await import('../assets/js/iso-view.js');
+const { renderIso, hullLeftX } = await import('../assets/js/iso-view.js');
 
 let passed = 0;
 function check(name, fn) {
@@ -247,4 +247,21 @@ check('L 形箱六个标注齐全（L / W / H(前) / H(后) / W(前) / W(后)）
   }
 });
 
+check('外引虚线只往左走，且不穿箱体（三种箱型）', () => {
+  for (const [name, d] of labelCases) {
+    const iso = name === 'rsc' ? d : computeIsoShape(d, name);
+    const root = renderIso(makeHost(420), iso);
+    const ext = root.__extLines || [];
+    const hull = root.__hull;
+    assert.ok(hull && hull.length >= 3, name + ' 应记录箱体轮廓');
+    for (const e of ext) {
+      assert.ok(e.x2 < e.x1, `${name} 的延长线必须朝左（${e.x1}→${e.x2}）`);
+      const left = hullLeftX(hull, e.y1);
+      assert.ok(
+        e.x1 <= left + 1,
+        `${name} 的延长线起点 ${e.x1.toFixed(1)} 跑进箱体（该高度左边界 ${left.toFixed(1)}）`,
+      );
+    }
+  }
+});
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);
