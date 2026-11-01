@@ -33,6 +33,9 @@ body {
 
 h1, h2, h3, p { margin: 0; }
 button, input, select { font: inherit; color: inherit; }
+/* 有些组件自己写了 display:flex/inline-flex，会盖掉 [hidden] 的默认 display:none
+   （比如登录弹层的 .tabs 在「重置密码」模式下必须收起来），这里统一兜住 */
+[hidden] { display: none !important; }
 
 /* ── 顶栏 ───────────────────────────────────────── */
 /* 吸顶：滚动时始终可见。背景必须是实色（不是半透明），否则下面的图纸会透出来；
