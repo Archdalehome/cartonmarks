@@ -29,7 +29,7 @@
   <div class="topbar-actions">
     <button type="button" class="btn btn-ghost btn-icon" id="undoBtn" title="撤销（Ctrl+Z）" aria-label="撤销" disabled>↶</button>
     <button type="button" class="btn btn-ghost btn-icon" id="redoBtn" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled>↷</button>
-    <span class="tag" id="stageTag">M9 · 模板保存与调用</span>
+    <!-- 版本标签只有管理员登录后才由 app.js 动态插入，匿名 HTML 里不存在这个节点 -->
     <button type="button" class="btn btn-ghost is-locked" id="templatesBtn" title="未登录，不可用">我的模板</button>
     <div class="account" id="accountBox" aria-live="polite"></div>
     <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>

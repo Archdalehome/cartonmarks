@@ -330,7 +330,31 @@ function applyTemplate(data, name) {
 
 let templates = null;
 
+/**
+ * 顶栏版本标签只给管理员看。
+ * 游客 / 普通注册用户根本不渲染这个节点（index.html 里也没有），
+ * 所以要等 /api/me 回来知道 isAdmin 之后才插进去，不会有「先出现再消失」的闪动。
+ */
+const STAGE_LABEL = 'M9 · 模板保存与调用';
+
+function renderStageTag(acc) {
+  const actions = dom.templatesBtn ? dom.templatesBtn.parentElement : null;
+  if (!actions) return;
+  const existing = actions.querySelector('#stageTag');
+  if (acc && acc.user && acc.user.isAdmin === true) {
+    if (existing) return;
+    const tag = document.createElement('span');
+    tag.id = 'stageTag';
+    tag.className = 'tag';
+    tag.textContent = STAGE_LABEL;
+    actions.insertBefore(tag, dom.templatesBtn);
+    return;
+  }
+  if (existing) existing.remove();
+}
+
 function onAccountChanged(acc) {
+  renderStageTag(acc);
   if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
   // 模板按钮的状态与悬停提示（未登录/未订阅/可用三种）
   if (dom.templatesBtn) {

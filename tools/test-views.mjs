@@ -4,6 +4,7 @@
  * 用法：node tools/test-views.mjs
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { installDom, makeHost } from './dom-shim.mjs';
 
 installDom();
@@ -325,5 +326,21 @@ check('各种宽度下所有图元都在画布内（标注不被裁掉）', () =
   }
 });
 
+
+console.log('版本标签只给管理员');
+
+check('首页 HTML 里没有写死的版本标签（匿名访问拿到的 HTML 不含它）', () => {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(!html.includes('stageTag'), 'index.html 里不该有 stageTag 节点');
+  assert.ok(!html.includes('M9 · 模板保存与调用'), 'index.html 里不该写死版本号');
+});
+
+check('版本标签由 app.js 按 /api/me 的 isAdmin 动态插入', () => {
+  const src = fs.readFileSync(new URL('../assets/js/app.js', import.meta.url), 'utf8');
+  assert.ok(/function renderStageTag\(/.test(src), 'app.js 应有 renderStageTag');
+  assert.ok(/isAdmin === true/.test(src), '应按 isAdmin 判断');
+  assert.ok(/renderStageTag\(acc\)/.test(src), 'onAccountChanged 里要调用');
+  assert.ok(/createElement\('span'\)/.test(src), '标签应动态创建，不能用 display:none');
+});
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);
