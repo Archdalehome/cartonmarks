@@ -741,3 +741,23 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   pointer-events: none;
   z-index: 1;
 }
+/* M9：我的模板 */
+.tpl-status { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+.tpl-status.is-error { color: #b91c1c; }
+.tpl-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; }
+.tpl-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+.tpl-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tpl-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-time { font-size: 12px; color: var(--muted); }
+.tpl-actions { display: flex; gap: 6px; flex: none; }
+.tpl-empty { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.7; }
+.tpl-name-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }

@@ -30,7 +30,51 @@ const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
   let filePath = path.join(ROOT, urlPath);
 
-  // 本地自测用假后台数据（CM_MOCK_SUB=1 时生效，不参与线上部署）
+  // 本地自测用假模板数据（CM_MOCK_SUB=1 时生效，不参与线上部署）
+  if (process.env.CM_MOCK_SUB === '1' && urlPath.startsWith('/api/templates')) {
+    const send = (status, body) => {
+      res.writeHead(status, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end(body === null ? '' : JSON.stringify(body));
+    };
+    const list = [
+      { id: 't_mock_1', name: 'L 形柜体箱（示例）', updatedAt: '2026-10-31T07:20:00.000Z' },
+      { id: 't_mock_2', name: '斜形汽配箱', updatedAt: '2026-10-30T12:05:00.000Z' },
+    ];
+    if (urlPath === '/api/templates' && req.method === 'GET') {
+      send(200, { items: list });
+      return;
+    }
+    if (urlPath === '/api/templates' && req.method === 'POST') {
+      send(201, { id: 't_mock_new' });
+      return;
+    }
+    if (urlPath.startsWith('/api/templates/') && req.method === 'GET') {
+      send(200, {
+        id: 't_mock_1',
+        name: 'L 形柜体箱（示例）',
+        updatedAt: '2026-10-31T07:20:00.000Z',
+        data: {
+          version: 1,
+          shape: 'lshape',
+          unit: 'mm',
+          dims: { L: 600, Hfront: 300, Hback: 450, Wfront: 250, Wback: 150 },
+          panels: { front: { elements: [] }, topLid: { elements: [] } },
+        },
+      });
+      return;
+    }
+    if (urlPath.startsWith('/api/templates/') && req.method === 'DELETE') {
+      res.writeHead(204, { 'Cache-Control': 'no-store' });
+      res.end();
+      return;
+    }
+    send(404, { error: 'not_found', message: 'mock: 未实现的模板接口' });
+    return;
+  }
+
   if (process.env.CM_MOCK_SUB === '1' && urlPath.startsWith('/api/admin/')) {
     const send = (status, body) => {
       res.writeHead(status, {

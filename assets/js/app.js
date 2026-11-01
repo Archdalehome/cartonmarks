@@ -28,6 +28,7 @@ import { validateDim, displayValue, unitSuffix, fmt } from './units.js';
 import { initAccountUI, currentAccount, isSubscribed, openLogin, openSubscribe, refreshAccount, handleApiError } from './auth-ui.js';
 import { exportPdf, imageReport } from './pdf-export.js';
 import { summarize, exportFileName, MIN_DPI } from './pdf-plan.js';
+import { createTemplatesUI } from './templates-ui.js';
 
 /* 尺寸字段登记表：一个字段 = 一个输入框 + 一条错误提示；不同箱型按 dimKeysFor() 取用 */
 const DIM_FIELDS = {
@@ -99,6 +100,7 @@ const dom = {
   addTextBtn: el('addTextBtn'),
   addImageBtn: el('addImageBtn'),
   addLineBtn: el('addLineBtn'),
+  saveTemplateBtn: el('saveTemplateBtn'),
   linePane: el('linePane'),
   lineOrientation: el('lineOrientation'),
   lineThickness: el('lineThickness'),
@@ -218,10 +220,20 @@ async function init() {
 
   // 账号 / 订阅：首屏拉一次 /api/me，失败按游客处理，不挡使用
   bindAccountGate();
+  templates = createTemplatesUI({
+    onLoad: applyTemplate,
+    getTemplateData: buildTemplateData,
+    toast: showToast,
+    onError: handleApiError,
+  });
   initAccountUI({ onChange: onAccountChanged })
     .then((acc) => {
       accountReady = true;
       onAccountChanged(acc);
+      // 深链：?templates=1 打开模板列表、?saveTemplate=1 打开命名弹窗（便于分享与自测）
+      const q = new URLSearchParams(location.search);
+      if (acc.subscribed && q.get('templates') === '1') templates?.open();
+      if (acc.subscribed && q.get('saveTemplate') === '1') templates?.openNameDialog();
     })
     .catch(() => {
       accountReady = true;
@@ -244,22 +256,71 @@ function mergeDraftPanels(rawPanels) {
   }
 }
 
-/** 订阅门：模板入口未订阅先弹订阅（箱型门在箱型下拉里） */
+/** 订阅门：模板入口未订阅先弹订阅；已订阅打开「我的模板」 */
 function bindAccountGate() {
   dom.templatesBtn?.addEventListener('click', () => {
     if (!isSubscribed()) {
       openSubscribe();
       return;
     }
-    showToast('模板保存与调用在 M9 开放');
+    templates?.open();
   });
 }
+
+/* ── 模板（M9） ─────────────────────────────────── */
+
+/** 只把与箱型无关的元素数据存进模板；尺寸/箱型单独存 */
+function buildTemplateData() {
+  const panels = {};
+  for (const [key, panel] of Object.entries(state.panels)) {
+    if (!panel || !Array.isArray(panel.elements)) continue;
+    panels[key] = { elements: panel.elements };
+  }
+  return {
+    version: 1,
+    shape: state.shape,
+    unit: state.unit,
+    dims: { ...state.dims },
+    panels,
+  };
+}
+
+/** 载入模板：整体替换箱型 / 尺寸 / 所有面的元素；失败返回 false */
+function applyTemplate(data, name) {
+  const parsed = parseDraft(data);
+  if (!parsed) {
+    showToast('模板数据无法解析，未做改动');
+    return false;
+  }
+  const shape = SHAPES.find((s) => s.id === parsed.shape);
+  if (shape && shape.subscriberOnly && !isSubscribed()) {
+    openSubscribe();
+    return false;
+  }
+  state.shape = parsed.shape;
+  state.unit = parsed.unit;
+  state.dims = { ...DIM_DEFAULTS, ...parsed.dims };
+  state.selected = null;
+  state.selectedElement = null;
+  state.panels = createPanels(computeNet(safeDims(state.dims), state.shape));
+  mergeDraftPanels(parsed.panels);
+  dom.shape.value = state.shape;
+  applyUnitChrome();
+  updateShapeChrome();
+  writeInputsFromState();
+  render();
+  pushHistory();
+  persistSoon();
+  return true;
+}
+
+let templates = null;
 
 function onAccountChanged(acc) {
   if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
   if (dom.templatesBtn) {
     dom.templatesBtn.classList.toggle('is-locked', !acc.subscribed);
-    dom.templatesBtn.textContent = acc.subscribed ? '模板' : '模板 🔒';
+    dom.templatesBtn.textContent = acc.subscribed ? '我的模板' : '我的模板 🔒';
   }
   // 后台入口只对管理员可见
   const adminEntry = document.getElementById('adminEntry');
@@ -1109,6 +1170,13 @@ function bindEvents() {
   dom.addTextBtn.addEventListener('click', () => openElementDialog('text'));
   dom.addImageBtn.addEventListener('click', () => openElementDialog('image'));
   dom.addLineBtn.addEventListener('click', () => openElementDialog('line'));
+  dom.saveTemplateBtn?.addEventListener('click', () => {
+    if (!isSubscribed()) {
+      openSubscribe();
+      return;
+    }
+    templates?.openNameDialog();
+  });
   dom.copyOverwriteBtn.addEventListener('click', () => copyPanelTo('overwrite'));
   dom.copyAppendBtn.addEventListener('click', () => copyPanelTo('append'));
   dom.clearPanelBtn.addEventListener('click', clearPanel);

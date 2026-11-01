@@ -156,7 +156,7 @@ function renderAccount() {
 
   if (dom.templatesBtn) {
     dom.templatesBtn.classList.toggle('is-locked', !isSubscribed());
-    dom.templatesBtn.textContent = isSubscribed() ? '模板' : '模板 🔒';
+    dom.templatesBtn.textContent = isSubscribed() ? '我的模板' : '我的模板 🔒';
   }
 
   notify(currentAccount());

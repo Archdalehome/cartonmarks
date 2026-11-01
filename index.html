@@ -28,7 +28,7 @@
     <button type="button" class="btn btn-ghost btn-icon" id="undoBtn" title="撤销（Ctrl+Z）" aria-label="撤销" disabled>↶</button>
     <button type="button" class="btn btn-ghost btn-icon" id="redoBtn" title="重做（Ctrl+Shift+Z）" aria-label="重做" disabled>↷</button>
     <span class="tag" id="stageTag">M8 · L 形 / 斜形箱</span>
-    <button type="button" class="btn btn-ghost is-locked" id="templatesBtn">模板 🔒</button>
+    <button type="button" class="btn btn-ghost is-locked" id="templatesBtn">我的模板 🔒</button>
     <a class="btn btn-ghost" id="adminEntry" href="/admin/" hidden>后台管理</a>
     <div class="account" id="accountBox" aria-live="polite"></div>
     <button type="button" class="btn btn-ghost" id="helpBtn">使用说明</button>
@@ -171,6 +171,7 @@
       <button type="button" class="btn" id="addTextBtn">+ 文字</button>
       <button type="button" class="btn" id="addImageBtn">+ 图片</button>
       <button type="button" class="btn" id="addLineBtn">+ 线条</button>
+      <button type="button" class="btn btn-ghost" id="saveTemplateBtn">保存为模板</button>
       <span class="divider" aria-hidden="true"></span>
       <label class="label" for="copyTarget">复制到</label>
       <select id="copyTarget" class="select select--sm"></select>
@@ -402,6 +403,37 @@
     <button type="button" class="btn" id="subCloseBtn">关闭</button>
     <button type="button" class="btn btn-primary" id="subPayBtn">微信支付 ¥9.9</button>
   </div>
+</dialog>
+
+<dialog id="templatesDialog" class="help-dialog">
+  <div class="help-inner">
+    <div class="help-head">
+      <h2>我的模板</h2>
+      <button type="button" class="btn btn-ghost btn-icon" id="tplCloseBtn" aria-label="关闭">✕</button>
+    </div>
+    <div class="help-body">
+      <p class="tpl-status" id="tplStatus"></p>
+      <div class="tpl-list" id="tplList"></div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="tplNameDialog" class="help-dialog">
+  <form class="help-inner" id="tplNameForm">
+    <div class="help-head">
+      <h2>保存为模板</h2>
+      <button type="button" class="btn btn-ghost btn-icon" id="tplNameCloseBtn" aria-label="关闭">✕</button>
+    </div>
+    <div class="help-body">
+      <label class="label" for="tplNameInput">模板名称（最多 40 个字）</label>
+      <input class="input" id="tplNameInput" maxlength="40" autocomplete="off" required />
+      <p class="field-error" id="tplNameError" role="alert"></p>
+      <div class="tpl-name-actions">
+        <button type="button" class="btn btn-ghost" id="tplNameCancelBtn">取消</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </form>
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
