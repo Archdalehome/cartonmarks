@@ -35,7 +35,13 @@ h1, h2, h3, p { margin: 0; }
 button, input, select { font: inherit; color: inherit; }
 
 /* ── 顶栏 ───────────────────────────────────────── */
+/* 吸顶：滚动时始终可见。背景必须是实色（不是半透明），否则下面的图纸会透出来；
+   层级 40 只压正文，原生 <dialog> 在 top layer 里，永远盖得住它。
+   高度由 app.js 量出来写到 --topbar-h，锚点跳转靠 scroll-margin-top 不被盖住。 */
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -833,6 +839,13 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   .topbar-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; row-gap: 8px; }
   .brand { flex: 0 0 auto; }
   .brand-text h1 { white-space: nowrap; }
+  /* 吸顶后这一行不能往上长：中等宽度也压成一行省略 */
+  .brand-text p.brand-sub.is-promo {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: min(420px, calc(100vw - 170px));
+  }
 }
 /* Logo：直接显示图片自带的圆角，不再套 border-radius */
 .brand-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -898,7 +911,25 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
     max-width: 190px;
     padding: 2px 6px;
   }
+  /* 吸顶后窄屏顶栏会占掉两行，收紧内边距和按钮间距，尽量把可视区还给图纸 */
+  .topbar { padding: 8px 12px; gap: 8px; }
+  .topbar-actions { gap: 6px; row-gap: 6px; }
+  .brand-icon { width: 26px; height: 26px; }
+  .brand-text h1 { font-size: 14px; }
+  /* 版本标签是给管理员看的状态位，窄屏不占按钮行的宽度 */
+  #stageTag { display: none; }
+  /* 固定高度最多两行：副标题只留一行省略，不再往上长 */
+  .brand-text p.brand-sub.is-promo {
+    max-width: min(190px, calc(100vw - 150px));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
+
+/* 吸顶后任何锚点跳转/scrollIntoView 都要给顶栏让位（高度由 app.js 实测写入） */
+:root { --topbar-h: 64px; }
+[id] { scroll-margin-top: calc(var(--topbar-h, 64px) + 10px); }
 
 /* 天地盖：天盖 / 地盖两张图上下排，各带小标题（各自独立缩放） */
 #isoHost, #netHost { display: flex; flex-direction: column; gap: 10px; }

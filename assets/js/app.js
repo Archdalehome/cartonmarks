@@ -829,6 +829,7 @@ function render() {
 
   updateSelectionInfo();
   syncEditor();
+  syncTopbarHeight();
 }
 
 function clampAllElements() {
@@ -1526,7 +1527,12 @@ function bindEvents() {
     editor.select(null);
   });
 
-  window.addEventListener('resize', scheduleRender);
+  window.addEventListener('resize', () => {
+    syncTopbarHeight();
+    scheduleRender();
+  });
+  // 顶栏是吸顶的：把它实际高度写进 --topbar-h，锚点/scrollIntoView 才不会被它盖住
+  syncTopbarHeight();
   let lastWidth = dom.netHost.clientWidth;
   const ro = new ResizeObserver(() => {
     const w = dom.netHost.clientWidth;
@@ -1606,6 +1612,14 @@ function scheduleRender() {
     renderQueued = false;
     render();
   });
+}
+
+/** 吸顶顶栏的实测高度 → CSS 变量 --topbar-h（锚点 scroll-margin-top 用） */
+function syncTopbarHeight() {
+  const bar = document.querySelector('.topbar');
+  if (!bar) return;
+  const h = Math.round(bar.getBoundingClientRect().height);
+  if (h > 0) document.documentElement.style.setProperty('--topbar-h', `${h}px`);
 }
 
 /* ── 轻提示 ─────────────────────────────────────── */
