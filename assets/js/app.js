@@ -1,4 +1,4 @@
-/**
+﻿/**
  * app.js —— 页面装配与交互
  *
  * 数据流：输入（毫米）→ 几何计算 → 视图绘制；
@@ -356,7 +356,7 @@ let templates = null;
  * 游客 / 普通注册用户根本不渲染这个节点（index.html 里也没有），
  * 所以要等 /api/me 回来知道 isAdmin 之后才插进去，不会有「先出现再消失」的闪动。
  */
-const STAGE_LABEL = 'M9 · 模板保存与调用';
+const STAGE_LABEL = 'M10 · 天地盖（天盖 + 地盖）';
 
 function renderStageTag(acc) {
   const actions = dom.templatesBtn ? dom.templatesBtn.parentElement : null;

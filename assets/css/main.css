@@ -823,15 +823,15 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 .brand-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
 /* 单位切换按钮不换行（宽度紧时不把 mm/cm/in 折到第二行） */
 .segmented button { white-space: nowrap; }
-/* 轮廓图下方的体积/周长指标（单位固定 CBM / 英寸，不跟顶部单位切换） */
+/* 体积/周长指标：放在标题下面、轮廓图上面，左栏内容更紧凑（单位固定 CBM / 英寸，不跟顶部单位切换） */
 .iso-metrics {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 22px;
-  padding: 8px 14px 12px;
-  border-top: 1px dashed var(--line);
+  gap: 8px 22px;
+  padding: 8px 14px 8px;
+  border-bottom: 1px dashed var(--line);
 }
-.metric { min-width: 120px; }
+.metric { min-width: 110px; }
 .metric-line { display: flex; align-items: baseline; gap: 4px; }
 .metric-value { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .metric-unit { font-size: 11px; color: var(--muted); }
@@ -898,3 +898,4 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   font-variant-numeric: tabular-nums;
 }
 .piece-slot .canvas { padding: 0; }
+
