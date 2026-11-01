@@ -150,7 +150,7 @@ check('summarize 统计正确', () => {
   assert.equal(s.pageSize.width, 297);
 });
 
-console.log('A3/A4 拼版');
+console.log('导出与文件命名');
 
 check('线条参与页计划：绝对坐标 + 不占图片计数', () => {
   const linePanels = {

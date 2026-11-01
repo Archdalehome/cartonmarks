@@ -1,4 +1,4 @@
-# Carton Mark · 箱唛设计工具
+﻿# Carton Mark · 箱唛设计工具
 
 纯静态站点（HTML + CSS + 原生 JS，无构建步骤），Cloudflare Pages 直接发布仓库根目录。
 线上地址：https://cartonmarks.pages.dev
@@ -19,14 +19,13 @@
   - 撤销 / 重做 60 步（Ctrl+Z / Ctrl+Shift+Z）
   - 草稿自动保存：localStorage，写满自动落 IndexedDB
 - **M3 PDF 导出**（已完成）
-  - 页面尺寸 = 展开图真实毫米 (2L+2W)×(H+W)，1:1；超出 PDF 单页上限 5080 mm 时等比缩并提示
+  - 导出统一为 A4 横向版式图：页面固定 297×210，四周留白 5%（左右 14.85、上下 10.5），展开图等比缩进可用区 267.3×189 并居中
   - 中文用 Noto Sans SC 子集 + opentype.js 转成矢量路径，PDF 不嵌字体、不会缺字
   - 只导出箱唛内容 + 裁切/开槽/折叠线；尺寸线、辅助线、高亮框不导出
   - 图片按元素框 1:1 放置（不重新采样），导出前提示低于 150 dpi 的图片
-  - 两种模式：整张展开图一页（默认）/ 每个有内容的面各一页；文件名带尺寸和日期
+  - 一种模式：整张展开图一页；文件名 cartonmark_<箱型>_<尺寸>_A4_<日期>.pdf
 - **M4 收尾适配**（已完成）
-  - 超大箱 A3/A4 拼版：1:1 切块，每块带裁切角标、「第 i/N 块」和「接边：左/右/上/下」，A3 横放 420×297、A4 竖放 210×297，四周 8 mm 留白
-  - 页面里写明打印要选「实际大小 / 100%」，不要选「适合页面」
+  - 页面里写明：导出的是 A4 横向版式图，用于对版和存档，不作为 1:1 刀模使用
   - 窄屏显示「精确定位请用桌面端」提示
   - 面板列表完全由几何生成（`geometry.registerShapeGeometry`），测试里有假 L 形箱证明扩展点可用
   - robots.txt、404.html、og/meta、PDF 元信息（ASCII Title/Subject 带尺寸）
@@ -121,7 +120,7 @@ element = { id, type: 'text'|'image'|'line', x, y, w, h, rotation,
 
 新增箱型只需要：在 `geometry.js` 里 `registerShapeGeometry('lshape', compute)`，
 返回 `{ width, height, panels: { key: { label, kind, editable, x, y, w, h } }, outline, folds, cuts, dims }`。
-页面、编辑器、拼版导出都会自动跟着新面板走，不用改 UI。
+页面、编辑器、PDF 导出都会自动跟着新面板走，不用改 UI。
 
 ## 后端 /api（M6，Pages Functions）
 
