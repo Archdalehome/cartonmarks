@@ -849,3 +849,13 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 
 /* 天地盖指标口径说明（按外形尺寸，不加纸厚） */
 .metric-note { flex: 1 1 100%; font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+
+/* 需要看清的轻提示（比如切箱型把箱唛清空了）：换成琥珀底色、字数多也放得下 */
+.toast.is-warn {
+  background: #7c2d12;
+  border: 1px solid #c2410c;
+  color: #fff7ed;
+  max-width: min(680px, calc(100vw - 32px));
+  white-space: normal;
+  line-height: 1.6;
+}

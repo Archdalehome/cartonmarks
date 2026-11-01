@@ -468,6 +468,10 @@ function switchShape(id, opts = {}) {
   state.selected = null;
   state.selectedElement = null;
   // 面板 id 每个箱型都不一样，跨箱型映射只会把内容搬错面，一律清空
+  const clearedCount = Object.values(state.panels).reduce(
+    (n, p) => n + ((p && Array.isArray(p.elements) && p.elements.length) || 0),
+    0,
+  );
   state.panels = createPanels(computeNet(safeDims(state.dims), state.shape, { piece: state.piece }));
   dom.shape.value = shape.id;
   updateShapeChrome();
@@ -479,7 +483,14 @@ function switchShape(id, opts = {}) {
   history.reset(snapshot());
   updateHistoryButtons();
   persistSoon();
-  if (!opts.silent) showToast('已切换箱型，箱唛内容已清空');
+  // 撤销栈已清空，所以「内容没了」必须说清楚，不能让人以为还在
+  if (!opts.silent) {
+    if (clearedCount > 0) {
+      showToast(`已切换到${shape.name}：上一箱型的 ${clearedCount} 个箱唛元素已清空（这一步不能撤销）`, { ms: 5200, tone: 'warn' });
+    } else {
+      showToast(`已切换到${shape.name}`, { ms: 1800 });
+    }
+  }
   // 换箱型后补上 ?panel= 深链（面板 key 只在新箱型里存在）
   if (pendingPanel && isEditablePanel(lastNet, pendingPanel)) {
     const key = pendingPanel;
@@ -1492,13 +1503,20 @@ function scheduleRender() {
 
 /* ── 轻提示 ─────────────────────────────────────── */
 
-function showToast(msg) {
+/**
+ * @param {string} msg
+ * @param {{ms?:number, tone?:'warn'}} [opts] 需要让人看清的提示（比如箱唛被清空）用更长的时间和醒目底色
+ */
+function showToast(msg, opts = {}) {
+  const ms = Number(opts.ms) || 2200;
   dom.toast.textContent = msg;
   dom.toast.hidden = false;
+  dom.toast.classList.toggle('is-warn', opts.tone === 'warn');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     dom.toast.hidden = true;
-  }, 2200);
+    dom.toast.classList.remove('is-warn');
+  }, ms);
 }
 
 /* ── 启动 ───────────────────────────────────────── */
