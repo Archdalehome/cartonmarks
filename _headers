@@ -1,5 +1,7 @@
 # Carton Mark response headers (Cloudflare Pages)
-# HTML 每次回源校验，避免升级后仍看到旧界面；静态资源给 5 分钟缓存（文件名没带版本号，不能长缓存）
+# 前端 JS/CSS 文件名没带版本号，所以一律 no-cache：浏览器每次用 ETag 回源校验（304 很便宜），
+# 但保证「发版即生效」，不会再出现改了代码用户还看着旧图的情况。
+# vendor/ 是 jsPDF、字体、二维码库这类大文件，几个月才动一次，留 5 分钟缓存。
 /
   Cache-Control: no-cache
 
@@ -16,7 +18,7 @@
   Cache-Control: no-cache
 
 /assets/*
-  Cache-Control: public, max-age=300
+  Cache-Control: no-cache
 
 /vendor/*
   Cache-Control: public, max-age=300
