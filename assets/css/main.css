@@ -910,7 +910,45 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 }
 .ed-el-inner > * { display: block; }
 
-/* 模板弹层：我的 / 收到的 两个页签 */
-.tpl-tabs { margin-left: auto; margin-right: 8px; height: 28px; }
-.tpl-tabs button { padding: 0 10px; font-size: 12px; height: 24px; }
+/* 模板弹层：自己的在前、收到的在后（同一列表，靠分隔行和角标区分） */
+.tpl-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tpl-divider::before, .tpl-divider::after { content: ''; flex: 1; border-top: 1px dashed var(--line); }
+.tpl-divider > span { flex: none; }
+.tpl-item-shared { background: #f7f9fc; border-style: dashed; }
+.tpl-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #e8f0fb;
+  color: #2563eb;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 16px;
+  vertical-align: 1px;
+}
+.tpl-empty-sm { font-size: 12.5px; }
+.tpl-locked-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.tpl-locked-note > span { flex: 1; min-width: 0; }
+.tpl-locked-note .btn { flex: none; }
+@media (max-width: 480px) {
+  .tpl-locked-note { flex-direction: column; align-items: flex-start; }
+}
 .help-head { display: flex; align-items: center; gap: 8px; }

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -6,7 +6,7 @@
   <meta name="description" content="箱唛设计工具 Carton Mark：矩形箱 / L 形箱 / 斜形箱 / 天地盖展开图在线设计，文字、图片、横竖线条箱唛编辑，一键导出 A4 横向 PDF 版式图。">
   <meta name="theme-color" content="#1f6feb">
   <meta property="og:title" content="箱唛设计工具 · Carton Mark">
-  <meta property="og:description" content="矩形箱 / L 形箱 / 斜形箱展开图在线设计，箱唛编辑，1:1 导出 PDF。">
+  <meta property="og:description" content="矩形箱 / L 形箱 / 斜形箱 / 天地盖展开图在线设计，箱唛编辑，一键导出 A4 横向 PDF 版式图。">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://cartonmarks.pages.dev/assets/img/logo.png">
   <title>箱唛设计工具 · Carton Mark</title>
@@ -261,7 +261,7 @@
         <li><b>撤销</b>：工具栏 ↶ / ↷ 或 Ctrl+Z / Ctrl+Shift+Z，保留 60 步。</li>
       </ol>
       <p class="help-note">尺寸以毫米为准：600 × 400 × 300 的箱子，展开图为 2000 × 700 mm，前面板 600 × 300、侧面 400 × 300、主摇盖 600 × 200、防尘摇盖 400 × 200（防尘摇盖不印箱唛）。</p>
-      <p class="help-note">草稿自动保存在本机浏览器；图片过大时改用 IndexedDB 存储。M3 的 PDF 导出会按 1:1 真实毫米出图。</p>
+      <p class="help-note">草稿自动保存在本机浏览器；图片过大时改用 IndexedDB 存储。导出的 PDF 是 A4 横向版式图，展开图等比缩放进纸内、四周留白 5%。</p>
     </div>
   </form>
 </dialog>
@@ -396,7 +396,7 @@
         <input id="authName" type="text" maxlength="40">
       </div>
       <p class="element-error" id="authError" role="alert"></p>
-      <p class="hint">注册用邮箱验证码，10 分钟内有效；登录后仍只能使用矩形箱，订阅后解锁 L 形/斜形箱与模板。</p>
+      <p class="hint">注册用邮箱验证码，10 分钟内有效；登录后仍只能使用矩形箱（可以打开「我的模板」载入收到的分享），订阅后解锁 L 形/斜形箱/天地盖与模板保存。</p>
     </div>
     <div class="help-foot">
       <button type="button" class="btn" id="authCancel">取消</button>
@@ -415,7 +415,7 @@
     <ul class="sub-perks">
       <li>L 形箱、斜形箱</li>
       <li>箱唛模板保存与一键调用</li>
-      <li>1:1 PDF 导出不限次数</li>
+      <li>PDF 导出不限次数（A4 横向版式图）</li>
     </ul>
     <p class="sub-status" id="subStatus">当前未订阅</p>
     <div class="sub-pay" id="subPayArea" hidden>
@@ -435,10 +435,6 @@
   <div class="help-inner">
     <div class="help-head">
       <h2>我的模板</h2>
-      <div class="segmented tpl-tabs" id="tplTabs" role="tablist">
-        <button type="button" data-tab="mine" class="is-active" role="tab" aria-selected="true">我的</button>
-        <button type="button" data-tab="shared" role="tab" aria-selected="false">收到的</button>
-      </div>
       <button type="button" class="btn btn-ghost btn-icon" id="tplCloseBtn" aria-label="关闭">✕</button>
     </div>
     <div class="help-body">
@@ -457,7 +453,7 @@
     <div class="help-body">
       <label class="label" for="tplShareEmail">对方的注册邮箱</label>
       <input class="input" id="tplShareEmail" type="email" autocomplete="off" placeholder="someone@example.com" required />
-      <p class="hint">对方必须是注册用户；分享后对方在「收到的」里可以载入。对方没有该箱型的权限时会被提示订阅。</p>
+      <p class="hint">对方必须是注册用户；分享后对方在「我的模板」里就能看到并载入。对方没有该箱型的权限时会被提示订阅。</p>
       <p class="field-error" id="tplShareError" role="alert"></p>
       <div class="tpl-name-actions">
         <button type="button" class="btn btn-ghost" id="tplShareCancelBtn">取消</button>

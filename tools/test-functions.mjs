@@ -798,6 +798,22 @@ await check('收到矩形箱模板：未订阅的收件人也能载入', async (
   assert.deepEqual(body.data, data);
 });
 
+await check('权限分开：未订阅用户 GET /api/shared → 200，GET /api/templates → 403', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender6@b.com');
+  const recvToken = await registerUser(env, 'recv6@b.com');
+  const tplId = await makeTemplate(env, sender.token, '矩形模板2', { shape: 'rsc', dims: { L: 1, W: 1, H: 1 } });
+  await shareTo(env, sender.token, tplId, 'recv6@b.com');
+
+  const mine = await tplListEp.onRequestGet({ request: getRequest('https://x/api/templates', recvToken), env });
+  assert.equal(mine.status, 403);
+  assert.equal((await jsonBody(mine)).error, 'not_subscribed');
+
+  const received = await sharedListEp.onRequestGet({ request: getRequest('https://x/api/shared', recvToken), env });
+  assert.equal(received.status, 200);
+  assert.equal((await jsonBody(received)).items.length, 1);
+});
+
 await check('收到 L 形模板：未订阅的收件人 403 shape_locked（带 shape）', async () => {
   const env = makeEnv();
   const sender = await subscribedUser(env, 'sender3@b.com');

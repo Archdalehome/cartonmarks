@@ -31,6 +31,14 @@ const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
   let filePath = path.join(ROOT, urlPath);
 
+  // CM_MOCK_UNSUB=1：已登录但未订阅——/api/templates 403，/api/shared 照常，
+  // 用来测「未订阅也能打开我的模板、载入收到的分享」这条路径
+  if (process.env.CM_MOCK_UNSUB === '1' && urlPath.startsWith('/api/templates')) {
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'not_subscribed', message: 'mock: 未订阅' }));
+    return;
+  }
+
   // CM_MOCK_EXPIRE=1：模拟「会话到期」——/api/me 只第一次正常，之后 401；
   // 模板接口也一律 401，用来测「点我的模板 → 401 → 顶栏落回游客态」这条路径
   if (process.env.CM_MOCK_EXPIRE === '1' && urlPath.startsWith('/api/templates')) {
@@ -213,11 +221,12 @@ const server = http.createServer((req, res) => {
       }
     }
     const expired = process.env.CM_MOCK_EXPIRED_SUB === '1';
+    const unsub = process.env.CM_MOCK_UNSUB === '1';
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
         user: { email: 'dev@local', isAdmin: true },
-        subExpiresAt: new Date(Date.now() + (expired ? -86400e3 : 365 * 86400e3)).toISOString(),
+        subExpiresAt: unsub ? null : new Date(Date.now() + (expired ? -86400e3 : 365 * 86400e3)).toISOString(),
       }),
     );
     return;

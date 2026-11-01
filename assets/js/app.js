@@ -256,14 +256,17 @@ async function init() {
       openSubscribe();
       showToast(message || '这个箱型需要订阅后才能使用', { ms: 4200, tone: 'warn' });
     },
+    // 未订阅时列表里「自己的模板」那块给一个「去订阅」入口
+    onSubscribe: () => openSubscribe(),
   });
   initAccountUI({ onChange: onAccountChanged })
     .then((acc) => {
       accountReady = true;
       onAccountChanged(acc);
-      // 深链：?templates=1 打开模板列表、?saveTemplate=1 打开命名弹窗（便于分享与自测）
+      // 深链：?templates=1 打开模板列表（未订阅也能看，自己的列表会是锁态）、
+      // ?saveTemplate=1 打开命名弹窗（保存要订阅）
       const q = new URLSearchParams(location.search);
-      if (acc.subscribed && q.get('templates') === '1') templates?.open();
+      if (acc.user && q.get('templates') === '1') templates?.open();
       if (acc.subscribed && q.get('saveTemplate') === '1') templates?.openNameDialog();
     })
     .catch(() => {
@@ -287,16 +290,16 @@ function mergeDraftPanels(rawPanels) {
   }
 }
 
-/** 模板门：未登录 → 登录弹层；已登录未订阅 → 订阅层；已订阅 → 我的模板 */
+/**
+ * 模板门：未登录 → 登录弹层；已登录 → 我的模板。
+ * 未订阅也能打开：自己的模板读不到（403），但收到的分享可以载入；
+ * 载入时箱型没权限由后端 403 shape_locked 再弹订阅层。
+ */
 function bindAccountGate() {
   dom.templatesBtn?.addEventListener('click', () => {
     const acc = currentAccount();
     if (!acc.user) {
       openLogin();
-      return;
-    }
-    if (!isSubscribed()) {
-      openSubscribe();
       return;
     }
     templates?.open();
@@ -393,17 +396,23 @@ function onAccountChanged(acc) {
   renderStageTag(acc);
   renderBrandSub(acc);
   if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
-  // 模板按钮的状态与悬停提示（未登录/未订阅/可用三种）
+  // 模板按钮的状态与悬停提示（未登录 / 已登录但未订阅 / 可用）
   if (dom.templatesBtn) {
     const loggedIn = Boolean(acc.user);
     const locked = !acc.subscribed;
     dom.templatesBtn.classList.toggle('is-disabled', !loggedIn);
-    dom.templatesBtn.classList.toggle('is-locked', loggedIn && locked);
+    dom.templatesBtn.classList.toggle('is-locked', false);
     dom.templatesBtn.setAttribute('aria-disabled', String(!loggedIn));
-    dom.templatesBtn.title = !loggedIn ? '未登录，不可用' : locked ? '需订阅后可用' : '打开我的模板';
+    dom.templatesBtn.title = !loggedIn
+      ? '未登录，不可用'
+      : locked
+        ? '保存模板需订阅，收到的模板可直接使用'
+        : '打开我的模板';
   }
-  // 订阅失效 / 退出登录：模板列表里的旧名字一起收掉，别留半截状态
-  if (!acc.subscribed && templates) templates.reset('订阅或登录已失效，模板列表已清空。');
+  // 退出登录：模板列表里的旧名字一起收掉，别留半截状态；
+  // 订阅失效但还登录着时不清空——列表里收到的分享仍然可用，刷新一下让各自的锁生效。
+  if (!acc.user && templates) templates.reset('登录已失效，模板列表已清空。');
+  else if (templates && templates.isOpen()) templates.refresh();
   buildShapeSelect();
   // 深链里带的订阅专属箱型，等 /api/me 真正返回后再切（首帧 notify 先跳过）
   if (accountReady && pendingShape) {

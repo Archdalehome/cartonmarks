@@ -1,4 +1,4 @@
-﻿# Carton Mark · 箱唛设计工具
+# Carton Mark · 箱唛设计工具
 
 纯静态站点（HTML + CSS + 原生 JS，无构建步骤），Cloudflare Pages 直接发布仓库根目录。
 线上地址：https://cartonmarks.pages.dev
@@ -142,7 +142,7 @@ KV 绑定 `CM_KV`。**缺任何一项时接口返回 503 `backend_unavailable`�
 - 顶栏：未登录显示「登录 / 注册」；登录后显示邮箱 + 订阅状态 + 退出
 - 登录弹层：密码登录 / 邮箱验证码注册；发码按钮按后端 `retryAfter` 倒计时；`429/423/409` 都有中文提示
 - 订阅弹层：¥9.9/年，展示服务器返回的二维码（**原样编码，不假设 `weixin://`**，Xorpay 实际返回 http URL），按 `expiresIn` 显示有效期倒计时，前端每 3 秒查一次 `/api/pay/status`、最多 5 分钟
-- 权限门：L 形/斜形箱按钮、模板按钮未订阅时统一弹订阅层；订阅状态只认 `/api/me` 的 `subExpiresAt`，不做本地缓存，过期自动落回锁态
+- 权限门：L 形/斜形箱/天地盖下拉项未订阅时弹订阅层；**「我的模板」登录即可打开**（未登录才弹登录），未订阅时自己那部分锁住并给「去订阅」，收到的分享照常载入；保存模板/分享仍要订阅。订阅状态只认 `/api/me` 的 `subExpiresAt`，不做本地缓存，过期自动落回锁态
 - 错误分流：`401` 弹登录、`403 not_subscribed` 弹订阅、`503 backend_unavailable` 顶部横幅「服务暂不可用」，页面不白屏
 - 二维码用本地 `vendor/qrcode.js`（qrcode-generator，MIT）绘制到 canvas，不联网、不引 CDN
 ## 后台管理（仅管理员）

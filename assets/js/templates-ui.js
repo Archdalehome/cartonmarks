@@ -6,10 +6,12 @@
  *       GET /api/shared、GET/DELETE /api/shared/:shareId
  * 模板存服务端 KV，草稿仍是浏览器本地；互不覆盖。
  *
- * 交互：
- *  - 顶栏「我的模板」→ 弹层两个页签：我的 / 收到的
- *  - 我的：名称 + 更新时间 + 载入 / 分享 / 删除
- *  - 收到的：名称 + 来自谁 + 载入 / 删除（箱型没权限时载入会被后端 403 shape_locked）
+ * 交互（收到的分享直接并进同一个列表，不再分页签）：
+ *  - 顶栏「我的模板」→ 一个列表：自己的在前（按更新时间倒序）、收到的在后（按分享时间倒序）
+ *  - 自己的：名称 + 更新时间 + 载入 / 分享 / 删除
+ *  - 收到的：名称前带「分享」角标、副行「来自 x@y.com · 箱型 · 分享于 11-01」+ 载入 / 删除
+ *    （不给「分享」，避免模板被链式转发；要转发请原作者再分享一次）
+ *  - 未订阅也能打开看收到的分享；载入时箱型没权限 → 后端 403 shape_locked → 弹订阅层
  *  - 编辑器「保存为模板」→ 命名（≤40 字）→ POST
  */
 
@@ -17,14 +19,14 @@ import { api } from './api.js';
 
 const el = (id) => document.getElementById(id);
 const SHAPE_NAMES = { rsc: '矩形箱', lshape: 'L 形箱', bevel: '斜形箱', tiandi: '天地盖' };
+const MAX_MINE = 50;
 
-export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onShapeLocked }) {
+export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onShapeLocked, onSubscribe }) {
   const dom = {
     dialog: el('templatesDialog'),
     list: el('tplList'),
     status: el('tplStatus'),
     close: el('tplCloseBtn'),
-    tabs: el('tplTabs'),
     shareDialog: el('tplShareDialog'),
     shareForm: el('tplShareForm'),
     shareTitle: el('tplShareTitle'),
@@ -43,7 +45,7 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
 
   let items = []; // 我的模板
   let sharedItems = []; // 收到的分享
-  let tab = 'mine';
+  let ownLocked = ''; // '' | 'not_subscribed' | 'unauthorized' | 'error'
   let sharingId = '';
 
   function say(text, isError = false) {
@@ -51,12 +53,26 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
     dom.status.classList.toggle('is-error', Boolean(isError));
   }
 
+  const timeVal = (iso) => {
+    const t = iso ? new Date(iso).getTime() : 0;
+    return Number.isNaN(t) ? 0 : t;
+  };
+
   function fmtTime(iso) {
     if (!iso) return '—';
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '—';
     const p = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  /** 分享日期只到日：11-01 */
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   }
 
   function escapeHtml(s) {
@@ -69,52 +85,9 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
     })[c]);
   }
 
-  function renderTabs() {
-    if (!dom.tabs) return;
-    dom.tabs.querySelectorAll('button[data-tab]').forEach((b) => {
-      const on = b.dataset.tab === tab;
-      b.classList.toggle('is-active', on);
-      b.setAttribute('aria-selected', String(on));
-    });
-  }
-
-  function render(emptyText) {
-    renderTabs();
-    if (tab === 'shared') {
-      if (!sharedItems.length) {
-        dom.list.innerHTML = `<p class="tpl-empty">${escapeHtml(
-          emptyText || '还没有收到分享。别人把模板分享给这个邮箱后会出现在这里。',
-        )}</p>`;
-        return;
-      }
-      dom.list.innerHTML = sharedItems
-        .map(
-          (t) => `
-        <div class="tpl-item" data-id="${t.shareId}">
-          <div class="tpl-main">
-            <span class="tpl-name">${escapeHtml(t.name)}</span>
-            <span class="tpl-time">来自 ${escapeHtml(t.fromEmail)} · ${escapeHtml(SHAPE_NAMES[t.shape] || t.shape || '')} · ${fmtTime(t.sharedAt)}</span>
-          </div>
-          <div class="tpl-actions">
-            <button type="button" class="btn" data-act="load-shared">载入</button>
-            <button type="button" class="btn btn-ghost" data-act="del-shared">删除</button>
-          </div>
-        </div>`,
-        )
-        .join('');
-      return;
-    }
-
-    if (!items.length) {
-      dom.list.innerHTML = `<p class="tpl-empty">${escapeHtml(
-        emptyText || '还没有模板。在编辑器里点「保存为模板」把当前箱唛存下来。',
-      )}</p>`;
-      return;
-    }
-    dom.list.innerHTML = items
-      .map(
-        (t) => `
-        <div class="tpl-item" data-id="${t.id}">
+  function mineRow(t) {
+    return `
+        <div class="tpl-item" data-id="${escapeHtml(t.id)}" data-kind="mine">
           <div class="tpl-main">
             <span class="tpl-name">${escapeHtml(t.name)}</span>
             <span class="tpl-time">更新于 ${fmtTime(t.updatedAt)}</span>
@@ -124,9 +97,68 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
             <button type="button" class="btn" data-act="load">载入</button>
             <button type="button" class="btn btn-ghost" data-act="del">删除</button>
           </div>
-        </div>`,
-      )
-      .join('');
+        </div>`;
+  }
+
+  function sharedRow(t) {
+    const shapeName = SHAPE_NAMES[t.shape] || t.shape || '';
+    const meta = [`来自 ${escapeHtml(t.fromEmail || '')}`, shapeName, `分享于 ${fmtDate(t.sharedAt)}`]
+      .filter(Boolean)
+      .join(' · ');
+    return `
+        <div class="tpl-item tpl-item-shared" data-id="${escapeHtml(t.shareId)}" data-kind="shared">
+          <div class="tpl-main">
+            <span class="tpl-name"><span class="tpl-badge">分享</span>${escapeHtml(t.name)}</span>
+            <span class="tpl-time">${meta}</span>
+          </div>
+          <div class="tpl-actions">
+            <button type="button" class="btn" data-act="load">载入</button>
+            <button type="button" class="btn btn-ghost" data-act="del">删除</button>
+          </div>
+        </div>`;
+  }
+
+  function render(emptyText) {
+    const mine = items.slice().sort((a, b) => timeVal(b.updatedAt) - timeVal(a.updatedAt));
+    const shared = sharedItems
+      .slice()
+      .sort((a, b) => timeVal(b.sharedAt) - timeVal(a.sharedAt));
+
+    if (!mine.length && !shared.length) {
+      if (ownLocked === 'not_subscribed' && !emptyText) {
+        dom.list.innerHTML = `
+          <div class="tpl-locked-note">
+            <span>模板保存是订阅功能，订阅后可以把箱唛存成模板。别人分享给你的模板会出现在这里，可以直接载入。</span>
+            <button type="button" class="btn btn-ghost" data-act="subscribe">去订阅</button>
+          </div>`;
+        return;
+      }
+      const fallback =
+        ownLocked === 'not_subscribed'
+          ? '模板保存是订阅功能，订阅后可以把箱唛存成模板。别人分享给你的模板会出现在这里。'
+          : '还没有模板。在编辑器里点「保存为模板」把当前箱唛存下来；别人分享给你的模板也会出现在这里。';
+      dom.list.innerHTML = `<p class="tpl-empty">${escapeHtml(emptyText || fallback)}</p>`;
+      return;
+    }
+
+    const parts = [];
+    if (mine.length) {
+      parts.push(mine.map(mineRow).join(''));
+    } else if (ownLocked === 'not_subscribed') {
+      parts.push(`
+        <div class="tpl-locked-note">
+          <span>自己的模板需要订阅；下面收到的分享可以直接载入（箱型没权限时才会提示订阅）。</span>
+          <button type="button" class="btn btn-ghost" data-act="subscribe">去订阅</button>
+        </div>`);
+    } else {
+      parts.push('<p class="tpl-empty tpl-empty-sm">还没有自己的模板。在编辑器里点「保存为模板」把当前箱唛存下来。</p>');
+    }
+
+    if (shared.length) {
+      parts.push('<div class="tpl-divider"><span>收到的分享</span></div>');
+      parts.push(shared.map(sharedRow).join(''));
+    }
+    dom.list.innerHTML = parts.join('');
   }
 
   /**
@@ -136,6 +168,7 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
   function reset(reason) {
     items = [];
     sharedItems = [];
+    ownLocked = '';
     render(reason || undefined);
     say('');
     close();
@@ -143,44 +176,55 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
 
   async function refresh() {
     say('加载中…');
-    if (tab === 'shared') {
-      try {
-        const data = await api.sharedTemplates();
-        sharedItems = data.items || [];
-        render();
-        say(
-          data.notice ||
-            `收到 ${sharedItems.length} 个分享。载入时按箱型权限判断，没有该箱型权限会提示订阅。`,
-        );
-      } catch (err) {
-        handle(err, '读取分享失败');
+    const [mineRes, sharedRes] = await Promise.allSettled([api.templates(), api.sharedTemplates()]);
+    let errorText = '';
+
+    // 自己的模板：未订阅会 403，但收到的分享照常显示，所以两路分开处理
+    ownLocked = '';
+    items = [];
+    if (mineRes.status === 'fulfilled') {
+      items = mineRes.value.items || [];
+    } else {
+      const err = mineRes.reason;
+      const code = err && err.code;
+      if (code === 'not_subscribed') {
+        // 只锁「自己的模板」这一块，不能顺手弹订阅层——用户可能只是想载入收到的分享
+        ownLocked = 'not_subscribed';
+      } else if (code === 'unauthorized') {
+        ownLocked = 'unauthorized';
+        if (onError) onError(err); // 会话过期：顶栏落回游客
+      } else {
+        ownLocked = 'error';
+        errorText = `读取模板失败：${(err && err.message) || err}`;
       }
-      return;
     }
-    try {
-      const data = await api.templates();
-      items = data.items || [];
-      render();
-      say(`共 ${items.length} 个模板（上限 50 个）`);
-    } catch (err) {
-      handle(err, '读取模板失败');
+
+    sharedItems = [];
+    let notice = '';
+    if (sharedRes.status === 'fulfilled') {
+      sharedItems = sharedRes.value.items || [];
+      notice = sharedRes.value.notice || '';
+    } else {
+      const err = sharedRes.reason;
+      if (onError) onError(err);
+      if (!errorText) errorText = `读取收到的分享失败：${(err && err.message) || err}`;
     }
+
+    render();
+    const count = `我的 ${items.length} 个 · 收到 ${sharedItems.length} 个（我的上限 ${MAX_MINE}）`;
+    const extra = [notice, ownLocked === 'not_subscribed' ? '保存模板需订阅' : '', errorText].filter(Boolean);
+    say(extra.length ? `${count} · ${extra.join(' · ')}` : count, Boolean(errorText));
   }
 
-  function handle(err, prefix) {
+  /** 操作失败时的状态行文案（列表照旧，不清空） */
+  function failStatus(err, prefix) {
     if (onError) onError(err);
-    if (err && err.code === 'not_subscribed') {
-      // 订阅失效：列表一起清掉，别让旧名字留在界面上
-      items = [];
-      sharedItems = [];
-      render('订阅已失效，模板列表已清空。订阅后可以重新打开。');
+    const code = err && err.code;
+    if (code === 'not_subscribed') {
       say('模板是订阅功能，请先订阅', true);
       return;
     }
-    if (err && err.code === 'unauthorized') {
-      items = [];
-      sharedItems = [];
-      render('登录已过期，模板列表已清空。重新登录后再打开。');
+    if (code === 'unauthorized') {
       say('请先登录后再用模板', true);
       return;
     }
@@ -197,15 +241,20 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
     dom.dialog.close?.();
   }
 
-  function switchTab(next) {
-    if (next !== 'shared') tab = 'mine';
-    else tab = 'shared';
-    render();
-    refresh();
+  function isOpen() {
+    return Boolean(dom.dialog.open);
+  }
+
+  function findMine(id) {
+    return items.find((t) => t.id === id);
+  }
+
+  function findShared(shareId) {
+    return sharedItems.find((t) => t.shareId === shareId);
   }
 
   async function loadOne(id) {
-    const tpl = items.find((t) => t.id === id);
+    const tpl = findMine(id);
     try {
       const record = await api.template(id);
       if (!record || !record.data) {
@@ -218,7 +267,7 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
         toast(`已载入模板：${record.name || '未命名'}`);
       }
     } catch (err) {
-      handle(err, '载入模板失败');
+      failStatus(err, '载入模板失败');
     }
   }
 
@@ -234,42 +283,44 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
       if (err && err.code === 'shape_locked') {
         close();
         const shapeName = SHAPE_NAMES[(err.data && err.data.shape) || ''] || '这个箱型';
-        if (onShapeLocked) onShapeLocked(err.data && err.data.shape, `这个模板是${shapeName}，需要订阅后才能使用`);
+        if (onShapeLocked) {
+          onShapeLocked(err.data && err.data.shape, `这个模板是${shapeName}，需要订阅后才能使用`);
+        }
         return;
       }
-      handle(err, '载入分享失败');
+      failStatus(err, '载入分享失败');
     }
   }
 
   async function removeOne(id) {
-    const tpl = items.find((t) => t.id === id);
+    const tpl = findMine(id);
     if (!window.confirm(`删除模板「${(tpl && tpl.name) || id}」？删除后无法恢复。`)) return;
     try {
       await api.deleteTemplate(id);
       items = items.filter((t) => t.id !== id);
       render();
-      say(`已删除「${(tpl && tpl.name) || id}」，剩 ${items.length} 个`);
+      say(`已删除「${(tpl && tpl.name) || id}」，剩 ${items.length} 个 · 收到 ${sharedItems.length} 个`);
     } catch (err) {
-      handle(err, '删除模板失败');
+      failStatus(err, '删除模板失败');
     }
   }
 
   async function removeShared(shareId) {
-    const tpl = sharedItems.find((t) => t.shareId === shareId);
-    if (!window.confirm(`从「收到的」里删除「${(tpl && tpl.name) || shareId}」？对方不受影响。`)) return;
+    const tpl = findShared(shareId);
+    if (!window.confirm(`删除收到的分享「${(tpl && tpl.name) || shareId}」？对方不受影响。`)) return;
     try {
       await api.deleteShared(shareId);
       sharedItems = sharedItems.filter((t) => t.shareId !== shareId);
       render();
-      say(`已移除分享「${(tpl && tpl.name) || shareId}」，剩 ${sharedItems.length} 个`);
+      say(`已移除分享「${(tpl && tpl.name) || shareId}」，剩 ${sharedItems.length} 个 · 我的 ${items.length} 个`);
     } catch (err) {
-      handle(err, '删除分享失败');
+      failStatus(err, '删除分享失败');
     }
   }
 
   /* 分享弹窗 */
   function openShareDialog(id) {
-    const tpl = items.find((t) => t.id === id);
+    const tpl = findMine(id);
     sharingId = id;
     dom.shareError.textContent = '';
     dom.shareEmail.value = '';
@@ -324,22 +375,27 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
   dom.shareCancel?.addEventListener('click', closeShareDialog);
   dom.shareClose?.addEventListener('click', closeShareDialog);
 
-  dom.tabs?.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('button[data-tab]');
-    if (btn) switchTab(btn.dataset.tab);
-  });
-
   dom.list.addEventListener('click', (ev) => {
     const btn = ev.target.closest('button[data-act]');
     if (!btn) return;
+    // 「去订阅」在列表的锁定说明里，不属于任何一张卡片
+    if (btn.dataset.act === 'subscribe') {
+      if (onSubscribe) onSubscribe();
+      return;
+    }
     const row = btn.closest('.tpl-item');
     if (!row) return;
     const id = row.dataset.id;
-    if (btn.dataset.act === 'load') loadOne(id);
-    else if (btn.dataset.act === 'del') removeOne(id);
-    else if (btn.dataset.act === 'share') openShareDialog(id);
-    else if (btn.dataset.act === 'load-shared') loadShared(id);
-    else if (btn.dataset.act === 'del-shared') removeShared(id);
+    const shared = row.dataset.kind === 'shared';
+    if (btn.dataset.act === 'load') {
+      if (shared) loadShared(id);
+      else loadOne(id);
+    } else if (btn.dataset.act === 'del') {
+      if (shared) removeShared(id);
+      else removeOne(id);
+    } else if (btn.dataset.act === 'share' && !shared) {
+      openShareDialog(id);
+    }
   });
 
   dom.close?.addEventListener('click', close);
@@ -410,5 +466,5 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError, onS
   dom.nameCancel?.addEventListener('click', closeNameDialog);
   dom.nameClose?.addEventListener('click', closeNameDialog);
 
-  return { open, refresh, reset, openNameDialog };
+  return { open, refresh, reset, openNameDialog, isOpen };
 }

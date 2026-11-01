@@ -191,14 +191,19 @@ function renderAccount() {
   }
 
   if (dom.templatesBtn) {
-    // 未登录：禁用态但保持可点（点了开登录弹层）；已登录未订阅：可点，点了开订阅层
+    // 未登录：禁用态但保持可点（点了开登录弹层）；已登录（含未订阅）：可点，
+    // 未订阅也能进去载入收到的分享，保存模板才需要订阅
     const loggedIn = Boolean(state.user);
     const locked = !isSubscribed();
     dom.templatesBtn.classList.toggle('is-disabled', !loggedIn);
-    dom.templatesBtn.classList.toggle('is-locked', loggedIn && locked);
+    dom.templatesBtn.classList.toggle('is-locked', false);
     dom.templatesBtn.setAttribute('aria-disabled', String(!loggedIn));
     dom.templatesBtn.textContent = '我的模板';
-    dom.templatesBtn.title = !loggedIn ? '未登录，不可用' : locked ? '需订阅后可用' : '打开我的模板';
+    dom.templatesBtn.title = !loggedIn
+      ? '未登录，不可用'
+      : locked
+        ? '保存模板需订阅，收到的模板可直接使用'
+        : '打开我的模板';
   }
 
   notify(currentAccount());

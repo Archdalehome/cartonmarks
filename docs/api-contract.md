@@ -149,7 +149,11 @@ Xorpay 回调，`application/x-www-form-urlencoded`。
 - 入账逻辑与 `/api/pay/status` 完全共用同一个函数，幂等。
 - 成功响应：HTTP 200，body 纯文本 `ok`。（Xorpay 非 200 会重试 6 次）
 
-## 9. 模板接口（全部需登录 + 订阅未过期，否则 403 `not_subscribed`）
+## 9. 模板接口
+
+**权限分两档（2026-11-01 改）**：自己的模板要登录 + 订阅未过期；收到的分享只要登录。
+
+自己的模板（未订阅 → 403 `not_subscribed`）：
 
 - `GET /api/templates` → `{ "items": [{ "id", "name", "updatedAt" }] }`
 - `POST /api/templates` `{ "name": "最多 40 字", "data": { ...项目 JSON... } }` → 201 `{ "id": "t_xxx" }`
@@ -157,10 +161,23 @@ Xorpay 回调，`application/x-www-form-urlencoded`。
 - `GET /api/templates/{id}` → `{ "id", "name", "data", "updatedAt" }`
 - `DELETE /api/templates/{id}` → 204
 
+分享（发件人必须订阅；收件人只要登录）：
+
+- `POST /api/templates/{id}/share` `{ "email" }` → 200 `{ "shareId", "toEmail" }`
+  - 邮箱不是注册用户 → 404 `user_not_found`（不写任何 KV 键）；分享给自己 → 400 `user_is_self`；
+    未订阅发件人 → 403 `not_subscribed`；每分钟第 11 次 → 429 `rate_limited`；同模板重复分享给同一人覆盖不新增。
+- `GET /api/shared` → `{ "items": [{ "shareId", "fromEmail", "name", "shape", "sharedAt" }], "total", "limit", "notice" }`
+- `GET /api/shared/{shareId}` → `{ "name", "shape", "data", "fromEmail" }`
+  - 箱型权限在这里判定：`lshape` / `bevel` / `tiandi` 且当前用户未订阅 → 403 `shape_locked`（body 带 `shape`）；
+    `rsc` 直接放行。快照语义：内容在分享那一刻落库，发件人之后改模板不影响已发出的。
+- `DELETE /api/shared/{shareId}` → 204（收件人移除自己那份）
+- `DELETE /api/templates/{id}/share/{shareId}` → 204（发件人撤销，连收件人那份一起删）
+
 ## 前端配合
 
-- 启动时 `GET /api/me`，按 `user` / `subExpiresAt` 决定：游客（只有矩形箱）、注册（同左）、订阅（L 形/斜形 + 模板）。
-- 任何 401 → 打开登录弹层；`403 not_subscribed` → 打开订阅弹层。
+- 启动时 `GET /api/me`，按 `user` / `subExpiresAt` 决定：游客（只有矩形箱）、注册（只有矩形箱 + 可打开「我的模板」看收到的分享）、订阅（L 形/斜形 + 模板保存）。
+- 「我的模板」登录即可打开：自己的模板读不到（403）时只锁那一块并给「去订阅」，收到的分享照常列出、照常载入。
+- 任何 401 → 打开登录弹层；载入订阅专属箱型的分享 → `403 shape_locked` → 关模板层 + 打开订阅弹层并点名箱型。
 - 订阅状态每次进页面都从服务端取，**不信本地缓存**。
 
 ## 环境变量（Cloudflare Pages → Settings → Environment variables）
