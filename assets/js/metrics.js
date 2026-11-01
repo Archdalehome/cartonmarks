@@ -39,7 +39,8 @@ export function fmt2(v) {
 export function computeMetrics(dims, shape = 'rsc') {
   const L = num(dims && dims.L);
 
-  // 三边（非矩形箱的 H 用 H(后)，W 用 W(前)+W(后)）
+  // 三边（非矩形箱的 H 用 H(后)，W 用 W(前)+W(后)；
+  // 天地盖是套合结构，成品外形高度 = H(天) + H(地)）
   let W;
   let H;
   if (shape === 'lshape') {
@@ -48,6 +49,10 @@ export function computeMetrics(dims, shape = 'rsc') {
   } else if (shape === 'bevel') {
     W = num(dims.W);
     H = num(dims.Hback);
+  } else if (shape === 'tiandi') {
+    W = num(dims.W);
+    const hLid = num(dims.H);
+    H = hLid ? num(hLid + Math.max(1, hLid - TIANDI_GAP_H)) : null;
   } else {
     W = num(dims.W);
     H = num(dims.H);
@@ -70,12 +75,9 @@ export function computeMetrics(dims, shape = 'rsc') {
     // 梯形棱柱：截面积 = W × (H前 + H后) / 2
     realMm3 = (L * W * (Hf + Hb)) / 2;
   } else if (shape === 'tiandi') {
-    // 天地盖：实际能装的容积按地盖算（Chief 口径）。
-    // 壁厚没给，按地盖外尺寸当内腔——地盖 = 长宽各 −20、高 −10
-    const baseL = num(L - TIANDI_GAP_LW) || 0;
-    const baseW = num(W - TIANDI_GAP_LW) || 0;
-    const baseH = num(H - TIANDI_GAP_H) || 0;
-    realMm3 = baseL * baseW * baseH || null;
+    // 天地盖按外形尺寸（货代/客户都按外箱体积算，不加纸厚），
+    // 外形高度已经 = H(天) + H(地)，所以最大体积与实际体积相等
+    realMm3 = L * W * H;
   } else {
     // L 形：两级台阶，按深度分段乘各自高度
     const wf = num(dims.Wfront);

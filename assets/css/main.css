@@ -846,3 +846,6 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 .piece-toggle { height: 26px; padding: 1px; margin-left: 2px; }
 .piece-toggle button { padding: 0 9px; font-size: 12px; height: 22px; }
 .card-head { gap: 8px; }
+
+/* 天地盖指标口径说明（按外形尺寸，不加纸厚） */
+.metric-note { flex: 1 1 100%; font-size: 11.5px; color: var(--muted); line-height: 1.6; }

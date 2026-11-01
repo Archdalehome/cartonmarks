@@ -1,9 +1,10 @@
-﻿/**
+/**
  * tools/test-pdf-plan.mjs —— PDF 页计划的离线断言
  * 用法：node tools/test-pdf-plan.mjs
  */
 import assert from 'node:assert/strict';
 import { computeNet } from '../assets/js/geometry.js';
+import '../assets/js/geometry-shapes.js';
 import {
   computePageSize,
   collectPages,
@@ -205,4 +206,37 @@ check('线条参与页计划：绝对坐标 + 不占图片计数', () => {
   assert.equal(s.imageCount, 0);
 });
 
+/* ── 天地盖两页导出 ─────────────────────────────── */
+
+check('天地盖：两件各出 1 页，页面就是各自展开图尺寸（1200×1000 / 1160×960）', () => {
+  const lid = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'lid' });
+  const base = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'base' });
+  assert.deepEqual(computePageSize(lid), { width: 1200, height: 1000, scale: 1, scaled: false, limit: PDF_MAX_MM });
+  assert.deepEqual(computePageSize(base), { width: 1160, height: 960, scale: 1, scaled: false, limit: PDF_MAX_MM });
+});
+
+check('天地盖：拼版两块分开编号，块号各自从 1 开始', () => {
+  const lid = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'lid' });
+  const base = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'base' });
+  const a = planTiles(lid, 'a4');
+  const b = planTiles(base, 'a4');
+  assert.ok(a.tiles.length > 1, 'A4 放不下 1200×1000，应该切块');
+  assert.equal(a.tiles[0].index, 1);
+  assert.equal(b.tiles[0].index, 1, '地盖的块号要重新从 1 开始，不能接着天盖编号');
+  assert.equal(a.tiles[a.tiles.length - 1].total, a.tiles.length);
+  assert.equal(b.tiles[b.tiles.length - 1].total, b.tiles.length);
+});
+
+check('天地盖：文件名带两件的高度（cartonmark_tiandi_600x400_300-290_日期.pdf）', () => {
+  const name = exportFileName(
+    { L: 600, W: 400, H: 300 },
+    new Date(2026, 10, 1),
+    'tiandi_600x400_300-290',
+  );
+  assert.equal(name, 'cartonmark_tiandi_600x400_300-290_20261101.pdf');
+});
+
+check('普通箱型的文件名不受影响', () => {
+  assert.equal(exportFileName({ L: 600, W: 400, H: 300 }, new Date(2026, 10, 1)), 'cartonmark_600x400x300_20261101.pdf');
+});
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

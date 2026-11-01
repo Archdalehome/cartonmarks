@@ -156,10 +156,16 @@ export function dimsTag(dims) {
   return `${r(dims.L)}x${r(dims.W)}x${r(dims.H)}`;
 }
 
-export function exportFileName(dims, now = new Date()) {
+/**
+ * 文件名：cartonmark_600x400x300_20261101.pdf
+ * 多件套（天地盖）传 tag，把两件的高度都带上：
+ *   cartonmark_tiandi_600x400_300-290_20261101.pdf
+ */
+export function exportFileName(dims, now = new Date(), tag = '') {
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-  return `cartonmark_${dimsTag(dims)}_${stamp}.pdf`;
+  const body = tag ? `${tag}` : dimsTag(dims);
+  return `cartonmark_${body}_${stamp}.pdf`;
 }
 
 /** 汇总导出前的信息，供弹层展示 */
