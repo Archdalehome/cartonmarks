@@ -14,6 +14,7 @@ import {
   isEditablePanel,
   parseDraft,
   dimKeysFor,
+  dimsForShape,
 } from './project.js';
 import { loadProject, saveProject, compressImage } from './storage.js';
 import { computeNet } from './geometry.js';
@@ -143,6 +144,8 @@ const state = {
   shape: 'rsc',
   unit: 'mm',
   dims: { ...DIM_DEFAULTS },
+  // 每个箱型各自一套尺寸：切回来时原样还在，也不会漏到别的箱型里
+  dimsByShape: {},
   piece: 'lid', // 多件套箱型（天地盖）当前看的是哪一件
   selected: null,
   selectedElement: null,
@@ -153,6 +156,7 @@ const history = new History(60);
 let lastNet = null;
 let accountReady = false;
 let pendingShape = '';
+let pendingDims = null; // 深链里带给目标箱型的尺寸，等切过去再应用
 let pendingPanel = '';
 let netApi = null;
 let renderQueued = false;
@@ -191,11 +195,13 @@ async function init() {
 
   const draft = await loadProject();
   if (draft) {
+    state.dimsByShape = { ...(draft.dimsByShape || {}) };
     state.dims = { ...DIM_DEFAULTS, ...draft.dims };
     state.unit = draft.unit;
     state.shape = draft.shape;
     applyUnitChrome();
   }
+  rememberDims();
   updateShapeChrome();
 
   // 深链：?shape=lshape&Hfront=350&panel=topLid 之类，便于分享与自测
@@ -205,9 +211,17 @@ async function init() {
   if (wantedShape && SHAPES.some((s) => s.id === wantedShape && s.enabled)) {
     pendingShape = wantedShape;
   }
+  // 深链里的尺寸属于「目标箱型」，不是当前箱型：跟着 pendingShape 一起延后应用，
+  // 否则会被记到当前箱型那份里（切箱型后尺寸各存各的）
+  const urlDims = {};
   for (const k of ALL_DIM_KEYS) {
     const raw = params.get(k);
-    if (raw != null && raw !== '') state.dims[k] = Number(raw);
+    if (raw != null && raw !== '' && Number.isFinite(Number(raw))) urlDims[k] = Number(raw);
+  }
+  if (pendingShape && Object.keys(urlDims).length) {
+    pendingDims = urlDims;
+  } else {
+    Object.assign(state.dims, urlDims);
   }
   const wantedUnit = params.get('unit');
   if (wantedUnit === 'cm' || wantedUnit === 'in' || wantedUnit === 'mm') {
@@ -323,6 +337,7 @@ function applyTemplate(data, name) {
   state.shape = parsed.shape;
   state.unit = parsed.unit;
   state.dims = { ...DIM_DEFAULTS, ...parsed.dims };
+  state.dimsByShape[state.shape] = { ...state.dims };
   state.selected = null;
   state.selectedElement = null;
   state.panels = createPanels(computeNet(safeDims(state.dims), state.shape, { piece: state.piece }));
@@ -381,7 +396,8 @@ function onAccountChanged(acc) {
     if (want && (!want.subscriberOnly || acc.subscribed)) {
       const target = pendingShape;
       pendingShape = '';
-      switchShape(target);
+      switchShape(target, { silent: true, dims: pendingDims });
+      pendingDims = null;
       return;
     }
     pendingShape = '';
@@ -389,7 +405,7 @@ function onAccountChanged(acc) {
   // 只有 /api/me 真正返回之后才按订阅状态回退，避免首帧「未知状态」误把深链箱型切走
   const cur = SHAPES.find((s) => s.id === state.shape);
   if (accountReady && cur?.subscriberOnly && !acc.subscribed) {
-    switchShape('rsc');
+    switchShape('rsc', { silent: true });
     showToast('订阅已过期，已切回矩形箱');
   }
 }
@@ -441,27 +457,29 @@ function setFieldLabel(field, text) {
   if (node && node.textContent !== text) node.textContent = text;
 }
 
-/** 换箱型：面板槽位按新几何重建，内容按同名 key 迁移过去 */
-function switchShape(id) {
+/** 换箱型：尺寸各存各的、画布清空、撤销栈重置 */
+function switchShape(id, opts = {}) {
   const shape = SHAPES.find((s) => s.id === id) || SHAPES[0];
+  if (shape.id !== state.shape) rememberDims(); // 先存下旧箱型的尺寸
   state.shape = shape.id;
+  state.dims = { ...dimsForShape(state.dimsByShape, shape.id, DIM_DEFAULTS), ...(opts.dims || {}) };
   if (shape.id !== 'tiandi') state.piece = 'lid';
   document.body.dataset.shape = shape.id;
   state.selected = null;
   state.selectedElement = null;
-  const next = createPanels(computeNet(safeDims(state.dims), state.shape, { piece: state.piece }));
-  for (const [key, panel] of Object.entries(state.panels)) {
-    if (next[key] && panel && Array.isArray(panel.elements)) next[key].elements = panel.elements;
-  }
-  state.panels = next;
+  // 面板 id 每个箱型都不一样，跨箱型映射只会把内容搬错面，一律清空
+  state.panels = createPanels(computeNet(safeDims(state.dims), state.shape, { piece: state.piece }));
   dom.shape.value = shape.id;
   updateShapeChrome();
   writeInputsFromState();
   const check = readInputs();
   if (check.errors.length) showErrors(check.errors);
   render();
-  pushHistory();
+  // 换箱型不写进撤销栈：否则一撤销就把上一个箱型的面板搬回来
+  history.reset(snapshot());
+  updateHistoryButtons();
   persistSoon();
+  if (!opts.silent) showToast('已切换箱型，箱唛内容已清空');
   // 换箱型后补上 ?panel= 深链（面板 key 只在新箱型里存在）
   if (pendingPanel && isEditablePanel(lastNet, pendingPanel)) {
     const key = pendingPanel;
@@ -470,10 +488,21 @@ function switchShape(id) {
   }
 }
 
+/** 记下当前箱型的尺寸，切走 / 撤销 / 存草稿时用 */
+function rememberDims() {
+  state.dimsByShape[state.shape] = { ...state.dims };
+}
+
 /* ── 输入与校验 ─────────────────────────────────── */
 
 function writeInputsFromState() {
-  for (const k of dimKeysFor(state.shape)) {
+  const active = new Set(dimKeysFor(state.shape));
+  for (const k of ALL_DIM_KEYS) {
+    // 不属于当前箱型的输入框直接清空，别留着上一个箱型的数字
+    if (!active.has(k)) {
+      if (dom.inputs[k]) dom.inputs[k].value = '';
+      continue;
+    }
     const v = state.dims[k] != null ? state.dims[k] : DIM_DEFAULTS[k];
     dom.inputs[k].value = String(displayValue(v, state.unit));
   }
@@ -569,6 +598,7 @@ function onInputChanged() {
 
   showNotice(warns);
   state.dims = dims;
+  rememberDims();
   updateDerivedW();
   render();
   pushHistory({ coalesceKey: 'dims' });
@@ -1075,6 +1105,7 @@ function restore(snap) {
   const data = JSON.parse(snap);
   state.dims = data.dims;
   state.panels = data.panels;
+  rememberDims();
   writeInputsFromState();
   render();
   updateHistoryButtons();
@@ -1112,6 +1143,7 @@ function persistSoon() {
 async function persistNow() {
   const payload = serializeDraft({
     dims: state.dims,
+    dimsByShape: state.dimsByShape,
     unit: state.unit,
     shape: state.shape,
     panels: state.panels,
@@ -1311,6 +1343,7 @@ function bindEvents() {
   dom.resetBtn.addEventListener('click', () => {
     // 重置 = 尺寸回到当前箱型示例 + 清空所有箱唛内容（用户 2026-11-01 要求）
     state.dims = { ...DIM_DEFAULTS };
+    rememberDims();
     for (const panel of Object.values(state.panels)) {
       if (panel && Array.isArray(panel.elements)) panel.elements = [];
     }

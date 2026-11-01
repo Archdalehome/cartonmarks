@@ -37,6 +37,15 @@ export const DRAFT_KEY = 'cartonmark.draft.v1';
 
 export const EXAMPLE_DIMS = { L: 600, W: 400, H: 300 };
 
+/**
+ * 按箱型隔离的尺寸：切到某个箱型时用它自己那份，没设置过就用默认示例。
+ * 这样 L 形的 W(前)/W(后)/H(前)/H(后) 不会漏到矩形箱里。
+ */
+export function dimsForShape(dimsByShape, shapeId, defaults = EXAMPLE_DIMS) {
+  const saved = dimsByShape && dimsByShape[shapeId];
+  return { ...defaults, ...(saved || {}) };
+}
+
 /** 按几何结果生成可编辑面板的内容槽位（不含防尘摇盖等不可编辑区域） */
 export function createPanels(net) {
   const panels = {};
@@ -100,11 +109,31 @@ export function parseDraft(data) {
 
     // 各箱型只收自己需要的尺寸；缺任何一个就整份草稿作废
     const wanted = dimKeysFor(shape);
-    const clean = {};
+    const cleanDims = {};
     for (const k of wanted) {
       const v = num(k);
       if (v == null) return null;
-      clean[k] = v;
+      cleanDims[k] = v;
+    }
+
+    // 各箱型自己那份尺寸（可选字段，老草稿没有就只是当前箱型那份）
+    const dimsByShape = {};
+    if (data.dimsByShape && typeof data.dimsByShape === 'object') {
+      for (const s of SHAPES) {
+        const raw = data.dimsByShape[s.id];
+        if (!raw || typeof raw !== 'object') continue;
+        const one = {};
+        let ok = true;
+        for (const k of dimKeysFor(s.id)) {
+          const n = Number(raw[k]);
+          if (!Number.isFinite(n) || n <= 0) {
+            ok = false;
+            break;
+          }
+          one[k] = n;
+        }
+        if (ok) dimsByShape[s.id] = one;
+      }
     }
 
     const rawPanels = {};
@@ -117,7 +146,8 @@ export function parseDraft(data) {
     }
 
     return {
-      dims: clean,
+      dims: cleanDims,
+      dimsByShape,
       unit: data.unit === 'cm' ? 'cm' : data.unit === 'in' ? 'in' : 'mm',
       shape,
       panels: rawPanels,
@@ -129,8 +159,14 @@ export function parseDraft(data) {
 }
 
 /** 把项目序列化成可存储的纯数据（键来自当前面板，不写死箱型） */
-export function serializeDraft({ dims, unit, shape, panels }) {
-  const payload = { version: 4, dims, unit, shape, panels: {} };
+export function serializeDraft({ dims, unit, shape, panels, dimsByShape }) {
+  const payload = { version: 5, dims, unit, shape, panels: {} };
+  if (dimsByShape && typeof dimsByShape === 'object') {
+    payload.dimsByShape = {};
+    for (const [id, d] of Object.entries(dimsByShape)) {
+      if (d) payload.dimsByShape[id] = { ...d };
+    }
+  }
   for (const key of Object.keys(panels || {})) {
     payload.panels[key] = { elements: panels[key].elements || [] };
   }
