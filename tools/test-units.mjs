@@ -3,7 +3,7 @@
  * 用法：node tools/test-units.mjs
  */
 import assert from 'node:assert/strict';
-import { validateDim, toMm, fromMm, displayValue, unitSuffix } from '../assets/js/units.js';
+import { validateDim, toMm, fromMm, displayValue, unitSuffix, fmtLength, withUnit } from '../assets/js/units.js';
 
 let passed = 0;
 function check(name, fn) {
@@ -118,6 +118,33 @@ check('切单位后展开图总尺寸不变（斜形箱 600×397）', async () =
   );
   assert.equal(after.width, before.width, '总宽不能因为换单位而变');
   assert.ok(Math.abs(after.height - before.height) < 1e-6, '总高不能因为换单位而变');
+});
+
+console.log('图上标注的单位换算');
+
+check('毫米取整不带小数，厘米/英寸保留 2 位', () => {
+  assert.equal(fmtLength(600, 'mm'), '600');
+  assert.equal(fmtLength(427.2, 'cm'), '42.72');
+  assert.equal(fmtLength(427.2, 'in'), '16.82');
+  assert.equal(fmtLength(2000, 'cm'), '200.00');
+});
+
+check('派生尺寸同样换算（斜长 427.2、顶盖 550）', () => {
+  assert.equal(withUnit(427.2, 'cm'), '42.72 cm');
+  assert.equal(withUnit(550, 'in'), '21.65 in');
+  assert.equal(withUnit(863.6, 'mm'), '864 mm');
+});
+
+check('切到英寸再切回毫米，标注数值一字不差', () => {
+  const values = [600, 397, 427.2, 550, 863.6, 1050, 1994];
+  const before = values.map((v) => fmtLength(v, 'mm'));
+  // 标注每次都由毫米现算，不允许拿中间显示值二次换算
+  for (const v of values) {
+    fmtLength(v, 'in');
+    fmtLength(v, 'cm');
+  }
+  const after = values.map((v) => fmtLength(v, 'mm'));
+  assert.deepEqual(after, before);
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

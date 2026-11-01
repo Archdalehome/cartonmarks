@@ -1,4 +1,4 @@
-﻿/**
+/**
  * units.js —— 单位与尺寸校验
  * 内部一律使用毫米（mm）。显示层按当前单位换算，绝不把显示值写进数据。
  */
@@ -65,4 +65,18 @@ export function fmt(n, digits = 0) {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
+}
+
+/**
+ * 图纸标注用的长度文字（不含单位）：内部永远是毫米，这里只按当前单位换算。
+ * 毫米取整、不显示 .0；厘米 / 英寸保留 2 位。
+ */
+export function fmtLength(mm, unit = 'mm') {
+  const value = fromMm(Number(mm) || 0, unit);
+  return unit === 'cm' || unit === 'in' ? fmt(value, 2) : fmt(value, 0);
+}
+
+/** 带单位后缀的完整标注：600 mm / 60.00 cm / 23.62 in */
+export function withUnit(mm, unit = 'mm') {
+  return `${fmtLength(mm, unit)} ${unitSuffix(unit)}`;
 }

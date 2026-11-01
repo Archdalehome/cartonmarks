@@ -155,8 +155,14 @@ function renderAccount() {
   }
 
   if (dom.templatesBtn) {
-    dom.templatesBtn.classList.toggle('is-locked', !isSubscribed());
-    dom.templatesBtn.textContent = isSubscribed() ? '我的模板' : '我的模板 🔒';
+    // 未登录：禁用态但保持可点（点了开登录弹层）；已登录未订阅：可点，点了开订阅层
+    const loggedIn = Boolean(state.user);
+    const locked = !isSubscribed();
+    dom.templatesBtn.classList.toggle('is-disabled', !loggedIn);
+    dom.templatesBtn.classList.toggle('is-locked', loggedIn && locked);
+    dom.templatesBtn.setAttribute('aria-disabled', String(!loggedIn));
+    dom.templatesBtn.textContent = '我的模板';
+    dom.templatesBtn.title = !loggedIn ? '未登录，不可用' : locked ? '需订阅后可用' : '打开我的模板';
   }
 
   notify(currentAccount());

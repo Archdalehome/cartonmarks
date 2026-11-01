@@ -1,4 +1,4 @@
-﻿/**
+/**
  * tools/test-views.mjs —— 用 DOM 垫片把绘制代码真跑一遍
  * 检查：12 个区域、中文标签、尺寸标注、等轴测棱线、无运行时报错。
  * 用法：node tools/test-views.mjs
@@ -113,9 +113,11 @@ check('面板像素宽高比 = 真实毫米比例（前面板 2:1，主摇盖 3:
   const minor = edge('topRight');
   const right = edge('right');
 
-  assert.equal(Number(front.attrs.width) / Number(front.attrs.height), 2); // 600:300
-  assert.equal(Number(major.attrs.width) / Number(major.attrs.height), 3); // 600:200
-  assert.equal(Number(minor.attrs.width) / Number(minor.attrs.height), 2); // 400:200
+  // 像素坐标有四舍五入，比例按容差比，不要求严格相等
+  const ratio = (n) => Number(n.attrs.width) / Number(n.attrs.height);
+  assert.ok(Math.abs(ratio(front) - 2) < 1e-6, '前面板 600:300 = 2');
+  assert.ok(Math.abs(ratio(major) - 3) < 1e-6, '主摇盖 600:200 = 3');
+  assert.ok(Math.abs(ratio(minor) - 2) < 1e-6, '防尘摇盖 400:200 = 2');
   assert.ok(Math.abs(Number(right.attrs.width) / Number(right.attrs.height) - 4 / 3) < 1e-9);
 });
 

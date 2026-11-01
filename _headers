@@ -1,0 +1,4 @@
+# Carton Mark response headers (Cloudflare Pages)
+# Revalidate everything so users never see a stale build (e.g. stuck on M8 label)
+/*
+  Cache-Control: no-cache

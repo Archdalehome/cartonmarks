@@ -146,3 +146,10 @@ KV 绑定 `CM_KV`。**缺任何一项时接口返回 503 `backend_unavailable`�
 - 权限门：L 形/斜形箱按钮、模板按钮未订阅时统一弹订阅层；订阅状态只认 `/api/me` 的 `subExpiresAt`，不做本地缓存，过期自动落回锁态
 - 错误分流：`401` 弹登录、`403 not_subscribed` 弹订阅、`503 backend_unavailable` 顶部横幅「服务暂不可用」，页面不白屏
 - 二维码用本地 `vendor/qrcode.js`（qrcode-generator，MIT）绘制到 canvas，不联网、不引 CDN
+## 后台管理（仅管理员）
+
+首页**不再显示**「后台管理」入口（权限在服务端，不靠前端藏按钮）。管理员直接访问：
+
+- 地址：https://cartonmarks.pages.dev/admin/（本地 http://127.0.0.1:5173/admin/）
+- 未登录访问 /api/admin/* → 401 unauthorized；非管理员 → 403 admin_only
+- 功能：列用户（游标分页 + 邮箱搜索）、±订阅天数、删号（连带模板/会话）

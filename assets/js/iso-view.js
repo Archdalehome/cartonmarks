@@ -5,12 +5,13 @@
 
 import { svgEl, node, ensureDefs, line, pathEl, dimLine, contentWidth } from './svg.js';
 import { computeIso } from './geometry.js';
-import { fmt } from './units.js';
+import { fmtLength } from './units.js';
 
 const PAD_X = 54;
 const PAD_Y = 38;
 
-export function renderIso(host, input) {
+export function renderIso(host, input, opts = {}) {
+  const { unit = 'mm' } = opts;
   const cw = contentWidth(host);
   // 兼容两种入参：RSC 直接传尺寸（内部用 computeIso），新箱型传已算好的拉伸线稿
   const iso = input && input.corners ? input : computeIso(input);
@@ -66,11 +67,11 @@ export function renderIso(host, input) {
   };
   const hasFront = Number.isFinite(Number(dims.Hfront));
   const dims3 = [
-    { key: 'L', label: `L ${fmt(dims.L)}`, offset: 26 },
-    { key: 'W', label: `W ${fmt(dims.W)}`, offset: 26 },
+    { key: 'L', label: `L ${fmtLength(dims.L, unit)}`, offset: 26 },
+    { key: 'W', label: `W ${fmtLength(dims.W, unit)}`, offset: 26 },
     {
       key: 'H',
-      label: hasFront ? `H(前) ${fmt(dims.Hfront)}` : `H ${fmt(dims.H)}`,
+      label: hasFront ? `H(前) ${fmtLength(dims.Hfront, unit)}` : `H ${fmtLength(dims.H, unit)}`,
       offset: 26,
     },
   ];

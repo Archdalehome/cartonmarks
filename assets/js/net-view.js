@@ -6,12 +6,12 @@
  */
 
 import { svgEl, node, ensureDefs, line, rectEl, textEl, pathEl, dimLine, contentWidth } from './svg.js';
-import { fmt } from './units.js';
+import { fmtLength, withUnit } from './units.js';
 
 const PAD_TOP = 56;
 const PAD_BOTTOM = 66;
 const PAD_LEFT = 76;
-const PAD_RIGHT = 58;
+const PAD_RIGHT = 86;
 
 /**
  * @param {HTMLElement} host
@@ -21,7 +21,7 @@ const PAD_RIGHT = 58;
  * 12 个区域都画；防尘摇盖（minor）只画轮廓与尺寸，不可点击、不参与箱唛。
  */
 export function renderNet(host, net, opts = {}) {
-  const { selected = null, onSelect = () => {} } = opts;
+  const { selected = null, onSelect = () => {}, unit = 'mm' } = opts;
 
   const cw = contentWidth(host);
   const maxDrawH = Math.max(220, Math.min(620, Math.round((window.innerHeight || 820) * 0.56)));
@@ -49,6 +49,7 @@ export function renderNet(host, net, opts = {}) {
 
   /* 2. 面板：矩形用 rect，非矩形（梯形/台阶）用 polygon；防尘摇盖只画轮廓，不可点击 */
   const groups = new Map();
+  const labelNodes = [];
   const polyD = (p) => {
     const pts = p.points || [
       [p.x, p.y],
@@ -113,7 +114,7 @@ export function renderNet(host, net, opts = {}) {
 
     if (showName) {
       const dy = showSize ? -7 : 0;
-      g.appendChild(
+      labelNodes.push(
         textEl(cx, cy + dy, meta.label, {
           class: 'panel-label',
           'text-anchor': 'middle',
@@ -122,11 +123,14 @@ export function renderNet(host, net, opts = {}) {
       );
     }
     if (showSize) {
-      g.appendChild(
-        textEl(cx, cy + 9, `${fmt(p.w)} × ${fmt(p.h)}`, {
+      labelNodes.push(
+        textEl(cx, cy + 9, `${fmtLength(p.w, unit)} × ${fmtLength(p.h, unit)}`, {
           class: 'panel-size',
           'text-anchor': 'middle',
           'dominant-baseline': 'middle',
+          stroke: '#ffffff',
+          'stroke-width': 4,
+          'paint-order': 'stroke',
         }),
       );
     }
@@ -155,12 +159,15 @@ export function renderNet(host, net, opts = {}) {
     root.appendChild(line(X(f.x1), Y(f.y1), X(f.x2), Y(f.y2), { class: 'net-fold' }));
   }
 
+  // 面板文字压在所有线之上，避免被折线/开槽线划过去
+  for (const node of labelNodes) root.appendChild(node);
+
   /* 5. 尺寸线：总宽 / 总高 / L / W / H（图太小的时候只留总尺寸，避免文字打架） */
   const compact = drawW < 430;
   dimLine(root, {
     a: { x: X(0), y: Y(0) },
     b: { x: X(net.width), y: Y(0) },
-    label: `${fmt(net.width)} mm`,
+    label: withUnit(net.width, unit),
     offset: 30,
     center,
     className: 'is-strong',
@@ -168,7 +175,7 @@ export function renderNet(host, net, opts = {}) {
   dimLine(root, {
     a: { x: X(0), y: Y(0) },
     b: { x: X(0), y: Y(net.height) },
-    label: `${fmt(net.height)} mm`,
+    label: withUnit(net.height, unit),
     offset: 30,
     center,
     className: 'is-strong',
@@ -177,14 +184,14 @@ export function renderNet(host, net, opts = {}) {
     dimLine(root, {
       a: { x: X(0), y: Y(net.height) },
       b: { x: X(net.dims.L), y: Y(net.height) },
-      label: `L ${fmt(net.dims.L)}`,
+      label: `L ${fmtLength(net.dims.L, unit)}`,
       offset: 32,
       center,
     });
     dimLine(root, {
       a: { x: X(net.dims.L), y: Y(net.height) },
       b: { x: X(net.dims.L + net.dims.W), y: Y(net.height) },
-      label: `W ${fmt(net.dims.W)}`,
+      label: `W ${fmtLength(net.dims.W, unit)}`,
       offset: 32,
       center,
     });
@@ -193,8 +200,8 @@ export function renderNet(host, net, opts = {}) {
       b: { x: X(net.width), y: Y(net.bodyBottom) },
       label:
         net.dims.Hfront != null
-          ? `H(前) ${fmt(net.dims.Hfront)} / H(后) ${fmt(net.dims.Hback)}`
-          : `H ${fmt(net.dims.H)}`,
+          ? `H 前 ${fmtLength(net.dims.Hfront, unit)} / 后 ${fmtLength(net.dims.Hback, unit)}`
+          : `H ${fmtLength(net.dims.H, unit)}`,
       offset: 26,
       center,
     });

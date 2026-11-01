@@ -24,7 +24,7 @@ import { createEditor } from './editor.js';
 import { renderProperties, syncNumberFields } from './properties.js';
 import { History } from './history.js';
 import { clampElement, createTextElement, createImageElement, createLineElement, deepCopyElement } from './elements.js';
-import { validateDim, displayValue, unitSuffix, fmt } from './units.js';
+import { validateDim, displayValue, unitSuffix, fmt, fmtLength, withUnit } from './units.js';
 import { initAccountUI, currentAccount, isSubscribed, openLogin, openSubscribe, refreshAccount, handleApiError } from './auth-ui.js';
 import { exportPdf, imageReport } from './pdf-export.js';
 import { summarize, exportFileName, MIN_DPI } from './pdf-plan.js';
@@ -198,6 +198,11 @@ async function init() {
     const raw = params.get(k);
     if (raw != null && raw !== '') state.dims[k] = Number(raw);
   }
+  const wantedUnit = params.get('unit');
+  if (wantedUnit === 'cm' || wantedUnit === 'in' || wantedUnit === 'mm') {
+    state.unit = wantedUnit;
+    applyUnitChrome();
+  }
 
   // 面板槽位完全由当前箱型的几何结果生成（不写死 RSC）
   // 尺寸非法时先用兜底值出图，把错误提示留给输入框，不白屏
@@ -256,9 +261,14 @@ function mergeDraftPanels(rawPanels) {
   }
 }
 
-/** 订阅门：模板入口未订阅先弹订阅；已订阅打开「我的模板」 */
+/** 模板门：未登录 → 登录弹层；已登录未订阅 → 订阅层；已订阅 → 我的模板 */
 function bindAccountGate() {
   dom.templatesBtn?.addEventListener('click', () => {
+    const acc = currentAccount();
+    if (!acc.user) {
+      openLogin();
+      return;
+    }
     if (!isSubscribed()) {
       openSubscribe();
       return;
@@ -318,13 +328,15 @@ let templates = null;
 
 function onAccountChanged(acc) {
   if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
+  // 模板按钮的状态与悬停提示（未登录/未订阅/可用三种）
   if (dom.templatesBtn) {
-    dom.templatesBtn.classList.toggle('is-locked', !acc.subscribed);
-    dom.templatesBtn.textContent = acc.subscribed ? '我的模板' : '我的模板 🔒';
+    const loggedIn = Boolean(acc.user);
+    const locked = !acc.subscribed;
+    dom.templatesBtn.classList.toggle('is-disabled', !loggedIn);
+    dom.templatesBtn.classList.toggle('is-locked', loggedIn && locked);
+    dom.templatesBtn.setAttribute('aria-disabled', String(!loggedIn));
+    dom.templatesBtn.title = !loggedIn ? '未登录，不可用' : locked ? '需订阅后可用' : '打开我的模板';
   }
-  // 后台入口只对管理员可见
-  const adminEntry = document.getElementById('adminEntry');
-  if (adminEntry) adminEntry.hidden = !(acc.user && acc.user.isAdmin);
   buildShapeSelect();
   // 深链里带的订阅专属箱型，等 /api/me 真正返回后再切（首帧 notify 先跳过）
   if (accountReady && pendingShape) {
@@ -513,6 +525,8 @@ function switchUnit(unit) {
   writeInputsFromState();
   const { dims } = readInputs();
   if (dims) state.dims = dims;
+  // 图上的标注也要跟着换单位，不只是输入框
+  render();
   persistSoon();
 }
 
@@ -538,13 +552,14 @@ function render() {
   netApi = renderNet(dom.netHost, lastNet, {
     selected: state.selected,
     onSelect: selectPanel,
+    unit: state.unit,
   });
   if (state.selected) netApi.select(state.selected);
 
-  if (state.shape === 'rsc') renderIso(dom.isoHost, dims);
+  if (state.shape === 'rsc') renderIso(dom.isoHost, dims, { unit: state.unit });
   else {
     try {
-      renderIso(dom.isoHost, computeIsoShape(dims, state.shape));
+      renderIso(dom.isoHost, computeIsoShape(dims, state.shape), { unit: state.unit });
       dom.isoHost.dataset.isoError = '';
     } catch (err) {
       console.error('iso failed', err);
@@ -556,22 +571,24 @@ function render() {
   const { L, W } = dims;
   const hasFront = state.shape !== 'rsc';
   const geoDims = lastNet.dims;
+  const u = state.unit;
+  // 图上所有标注都按当前单位显示，内部仍是毫米
   const isoDims = hasFront
-    ? `${fmt(geoDims.L)} × ${fmt(geoDims.W)} × ${fmt(geoDims.Hfront)}/${fmt(geoDims.Hback)} mm`
-    : `${fmt(L)} × ${fmt(W)} × ${fmt(dims.H)} mm`;
+    ? `${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} × ${fmtLength(geoDims.Hfront, u)}/${fmtLength(geoDims.Hback, u)} ${unitSuffix(u)}`
+    : `${fmtLength(L, u)} × ${fmtLength(W, u)} × ${fmtLength(dims.H, u)} ${unitSuffix(u)}`;
   dom.isoMeta.textContent = isoDims;
-  dom.netMeta.textContent = `按容器宽度等比缩放 · 实际 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm`;
+  dom.netMeta.textContent = `按容器宽度等比缩放 · 实际 ${withUnit(lastNet.width, u)} × ${withUnit(lastNet.height, u)}`;
   const lidText = lastNet.lid
     ? lastNet.lid.kind === 'split'
-      ? `顶摇盖 ${fmt(geoDims.L)} × ${fmt(lastNet.lid.length)}（两片各 ${fmt(lastNet.lid.piece)}）`
-      : `顶盖 ${fmt(geoDims.L)} × ${fmt(lastNet.lid.length)}（一整片）`
+      ? `顶摇盖 ${fmtLength(geoDims.L, u)} × ${fmtLength(lastNet.lid.length, u)}（两片各 ${fmtLength(lastNet.lid.piece, u)}）`
+      : `顶盖 ${fmtLength(geoDims.L, u)} × ${fmtLength(lastNet.lid.length, u)}（一整片）`
     : '';
   dom.netSize.textContent =
-    `展开 ${fmt(lastNet.width)} × ${fmt(lastNet.height)} mm · ` +
+    `展开 ${withUnit(lastNet.width, u)} × ${withUnit(lastNet.height, u)} · ` +
     (hasFront
-      ? `箱身 ${fmt(geoDims.L)} × ${fmt(geoDims.W)} · 高 ${fmt(geoDims.Hfront)}/${fmt(geoDims.Hback)} · ${lidText}`
-      : `箱身 ${fmt(L)}/${fmt(W)} × ${fmt(dims.H)} · ` +
-        `主摇盖 ${fmt(L)} × ${fmt(lastNet.flap)} · 防尘摇盖 ${fmt(W)} × ${fmt(lastNet.flap)}（不印）`);
+      ? `箱身 ${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} · 高 ${fmtLength(geoDims.Hfront, u)}/${fmtLength(geoDims.Hback, u)} · ${lidText}`
+      : `箱身 ${fmtLength(L, u)}/${fmtLength(W, u)} × ${fmtLength(dims.H, u)} · ` +
+        `主摇盖 ${fmtLength(L, u)} × ${fmtLength(lastNet.flap, u)} · 防尘摇盖 ${fmtLength(W, u)} × ${fmtLength(lastNet.flap, u)}（不印）`);
 
   const panelCount = Object.keys(lastNet.panels).length;
   const editableCount = Object.values(lastNet.panels).filter((p) => p.editable).length;
