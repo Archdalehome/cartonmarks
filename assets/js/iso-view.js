@@ -132,7 +132,7 @@ const PAD_Y = 38;
 const EXT_GAP = 3; // 延长线离棱留的口子
 
 export function renderIso(host, input, opts = {}) {
-  const { unit = 'mm' } = opts;
+  const { unit = 'mm', dimLabels = {} } = opts;
   const cw = contentWidth(host);
   // 兼容两种入参：RSC 直接传尺寸（内部用 computeIso），新箱型传已算好的拉伸线稿
   const iso = input && input.corners ? input : computeIso(input);
@@ -195,11 +195,11 @@ export function renderIso(host, input, opts = {}) {
     y: ((minY + maxY) / 2) * scale + oy,
   };
   const dims3 = [
-    { key: 'L', label: `L ${fmtLength(dims.L, unit)}`, offset: 26 },
-    { key: 'W', label: `W ${fmtLength(dims.W, unit)}`, offset: 26 },
+    { key: 'L', label: `${dimLabels.L || 'L'} ${fmtLength(dims.L, unit)}`, offset: 26 },
+    { key: 'W', label: `${dimLabels.W || 'W'} ${fmtLength(dims.W, unit)}`, offset: 26 },
   ];
   if (!hasFront) {
-    dims3.push({ key: 'H', label: `H ${fmtLength(dims.H, unit)}`, offset: 26 });
+    dims3.push({ key: 'H', label: `${dimLabels.H || 'H'} ${fmtLength(dims.H, unit)}`, offset: 26 });
   }
   if (iso.anchors.Hback) {
     dims3.push({ key: 'Hback', label: `H(后) ${fmtLength(dims.Hback, unit)}`, offset: 42 });

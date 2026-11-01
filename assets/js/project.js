@@ -8,14 +8,19 @@
 /** 可选箱型；subscriberOnly 的箱型要在订阅后才可选 */
 export const SHAPES = [
   { id: 'rsc', name: '矩形箱', enabled: true },
+  { id: 'tiandi', name: '天地盖', enabled: true, subscriberOnly: true },
   { id: 'lshape', name: 'L 形箱', enabled: true, subscriberOnly: true },
   { id: 'bevel', name: '斜形箱', enabled: true, subscriberOnly: true },
 ];
 
-/** 某个箱型要输哪几个尺寸（L 形箱的 W 由 W前+W后 派生，不单独输入） */
+/**
+ * 某个箱型要输哪几个尺寸。
+ * L 形箱的 W 由 W前+W后 派生；天地盖只输天盖外尺寸，地盖三个尺寸自动派生。
+ */
 export function dimKeysFor(shape) {
   if (shape === 'lshape') return ['L', 'Wfront', 'Wback', 'Hfront', 'Hback'];
   if (shape === 'bevel') return ['L', 'W', 'Hfront', 'Hback'];
+  if (shape === 'tiandi') return ['L', 'W', 'H'];
   return ['L', 'W', 'H'];
 }
 
@@ -25,6 +30,9 @@ export const SLOT_LABELS = {
   minor: '防尘摇盖',
 };
 
+/** 某个箱型有没有「天/地」这类多件套，需要切换查看 */
+export const PIECE_SHAPES = ['tiandi'];
+
 export const DRAFT_KEY = 'cartonmark.draft.v1';
 
 export const EXAMPLE_DIMS = { L: 600, W: 400, H: 300 };
@@ -32,8 +40,10 @@ export const EXAMPLE_DIMS = { L: 600, W: 400, H: 300 };
 /** 按几何结果生成可编辑面板的内容槽位（不含防尘摇盖等不可编辑区域） */
 export function createPanels(net) {
   const panels = {};
-  for (const [key, p] of Object.entries(net.panels)) {
-    if (!p.editable) continue;
+  // 多件套箱型一次给两件的面板（allPanels），切换天/地盖时内容不会丢
+  const source = (net && net.allPanels) || (net && net.panels) || {};
+  for (const [key, p] of Object.entries(source)) {
+    if (!p || p.kind === 'minor' || p.editable === false) continue;
     panels[key] = { label: p.label, kind: p.kind, elements: [] };
   }
   return panels;

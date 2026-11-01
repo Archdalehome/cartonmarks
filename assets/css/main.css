@@ -841,3 +841,8 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 .derived-value { width: 92px; padding: 0 22px 0 8px; }
 /* 尺寸标注文字加白边，压在线上也看得清 */
 .dim-text { paint-order: stroke; stroke: #fff; stroke-width: 3px; stroke-linejoin: round; }
+
+/* 天地盖：天盖 / 地盖切换（放在展开图卡片标题行里） */
+.piece-toggle { height: 26px; padding: 1px; margin-left: 2px; }
+.piece-toggle button { padding: 0 9px; font-size: 12px; height: 22px; }
+.card-head { gap: 8px; }

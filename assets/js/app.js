@@ -1,4 +1,4 @@
-/**
+﻿/**
  * app.js —— 页面装配与交互
  *
  * 数据流：输入（毫米）→ 几何计算 → 视图绘制；
@@ -17,7 +17,7 @@ import {
 } from './project.js';
 import { loadProject, saveProject, compressImage } from './storage.js';
 import { computeNet } from './geometry.js';
-import { computeIsoShape } from './geometry-shapes.js';
+import { computeIsoShape, tiandiDerived } from './geometry-shapes.js';
 import { renderNet } from './net-view.js';
 import { renderIso } from './iso-view.js';
 import { createEditor } from './editor.js';
@@ -59,9 +59,14 @@ const dom = {
   inputs: Object.fromEntries(ALL_DIM_KEYS.map((k) => [k, el(DIM_FIELDS[k].input)])),
   errors: Object.fromEntries(ALL_DIM_KEYS.map((k) => [k, el(DIM_FIELDS[k].err)])),
   dimFields: [...document.querySelectorAll('[data-shape-fields]')],
+  fieldL: el('fieldL'),
   fieldW: el('fieldW'),
   fieldH: el('fieldH'),
   dimWDerived: el('dimWDerived'),
+  dimLBase: el('dimLBase'),
+  dimWBase: el('dimWBase'),
+  dimHBase: el('dimHBase'),
+  pieceToggle: el('pieceToggle'),
   notice: el('notice'),
   isoHost: el('isoHost'),
   netHost: el('netHost'),
@@ -137,6 +142,7 @@ const state = {
   shape: 'rsc',
   unit: 'mm',
   dims: { ...DIM_DEFAULTS },
+  piece: 'lid', // 多件套箱型（天地盖）当前看的是哪一件
   selected: null,
   selectedElement: null,
   panels: {},
@@ -207,10 +213,12 @@ async function init() {
     state.unit = wantedUnit;
     applyUnitChrome();
   }
+  // 深链：?piece=base 直接打开地盖（天地盖这类两件套）
+  if (params.get('piece') === 'base') state.piece = 'base';
 
   // 面板槽位完全由当前箱型的几何结果生成（不写死 RSC）
   // 尺寸非法时先用兜底值出图，把错误提示留给输入框，不白屏
-  state.panels = createPanels(computeNet(safeDims(state.dims), state.shape));
+  state.panels = createPanels(computeNet(safeDims(state.dims), state.shape, { piece: state.piece }));
   if (draft) {
     mergeDraftPanels(draft.panels);
     showToast('已恢复上次草稿');
@@ -316,7 +324,7 @@ function applyTemplate(data, name) {
   state.dims = { ...DIM_DEFAULTS, ...parsed.dims };
   state.selected = null;
   state.selectedElement = null;
-  state.panels = createPanels(computeNet(safeDims(state.dims), state.shape));
+  state.panels = createPanels(computeNet(safeDims(state.dims), state.shape, { piece: state.piece }));
   mergeDraftPanels(parsed.panels);
   dom.shape.value = state.shape;
   applyUnitChrome();
@@ -409,19 +417,38 @@ function updateShapeChrome() {
     const list = (node.dataset.shapeFields || '').split(/\s+/);
     show(node, list.includes(state.shape));
   }
+  const isTiandi = state.shape === 'tiandi';
   show(dom.fieldW, state.shape !== 'lshape');
-  show(dom.fieldH, state.shape === 'rsc');
+  show(dom.fieldH, state.shape === 'rsc' || isTiandi);
+  if (dom.pieceToggle) {
+    show(dom.pieceToggle, isTiandi);
+    dom.pieceToggle.querySelectorAll('button[data-piece]').forEach((b) => {
+      const on = b.dataset.piece === state.piece;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+  }
+  setFieldLabel(dom.fieldL, isTiandi ? '长 L(天)' : '长 L');
+  setFieldLabel(dom.fieldW, isTiandi ? '宽 W(天)' : '宽 W');
+  setFieldLabel(dom.fieldH, isTiandi ? '高 H(天)' : '高 H');
   updateDerivedW();
+}
+
+function setFieldLabel(field, text) {
+  if (!field) return;
+  const node = field.querySelector('.label');
+  if (node && node.textContent !== text) node.textContent = text;
 }
 
 /** 换箱型：面板槽位按新几何重建，内容按同名 key 迁移过去 */
 function switchShape(id) {
   const shape = SHAPES.find((s) => s.id === id) || SHAPES[0];
   state.shape = shape.id;
+  if (shape.id !== 'tiandi') state.piece = 'lid';
   document.body.dataset.shape = shape.id;
   state.selected = null;
   state.selectedElement = null;
-  const next = createPanels(computeNet(safeDims(state.dims), state.shape));
+  const next = createPanels(computeNet(safeDims(state.dims), state.shape, { piece: state.piece }));
   for (const [key, panel] of Object.entries(state.panels)) {
     if (next[key] && panel && Array.isArray(panel.elements)) next[key].elements = panel.elements;
   }
@@ -454,11 +481,27 @@ function writeInputsFromState() {
 }
 
 function updateDerivedW() {
-  if (!dom.dimWDerived) return;
-  const wf = Number(state.dims.Wfront) || 0;
-  const wb = Number(state.dims.Wback) || 0;
-  const sum = wf + wb;
-  dom.dimWDerived.textContent = sum > 0 ? String(displayValue(sum, state.unit)) : '—';
+  if (dom.dimWDerived) {
+    const wf = Number(state.dims.Wfront) || 0;
+    const wb = Number(state.dims.Wback) || 0;
+    const sum = wf + wb;
+    dom.dimWDerived.textContent = sum > 0 ? String(displayValue(sum, state.unit)) : '—';
+  }
+  // 天地盖：地盖三个尺寸由天盖派生（长宽各 −20mm、高 −10mm）
+  if (dom.dimLBase) {
+    const { lid, base } = tiandiDerived(safeDims(state.dims));
+    const pair = [
+      [dom.dimLBase, base.L],
+      [dom.dimWBase, base.W],
+      [dom.dimHBase, base.H],
+    ];
+    for (const [node, mm] of pair) {
+      if (node) node.textContent = String(displayValue(mm, state.unit));
+    }
+    const title = `天盖 ${displayValue(lid.L, state.unit)} × ${displayValue(lid.W, state.unit)} × ${displayValue(lid.H, state.unit)} → 长宽各 −20、高 −10`;
+    const host = dom.dimLBase.closest('[data-shape-fields="tiandi"]');
+    if (host) host.title = title;
+  }
 }
 
 function readInputs() {
@@ -478,7 +521,7 @@ function readInputs() {
   // 没在当前箱型里的字段也留着上一次的值，切回时不用重输
   for (const k of ALL_DIM_KEYS) if (dims[k] == null) dims[k] = state.dims[k] ?? DIM_DEFAULTS[k];
 
-  if (!errors.length && state.shape !== 'rsc' && dims.Hfront === dims.Hback) {
+  if (!errors.length && state.shape !== 'rsc' && state.shape !== 'tiandi' && dims.Hfront === dims.Hback) {
     errors.push({ key: 'Hback', msg: 'H(前) 与 H(后) 相等就不是斜形/台阶形状了，请输入不同高度' });
   }
   return { dims: errors.length ? null : dims, errors, warns };
@@ -565,7 +608,7 @@ function safeDims(dims) {
   for (const k of ALL_DIM_KEYS) {
     if (!(Number(out[k]) > 0)) out[k] = DIM_DEFAULTS[k];
   }
-  if (state.shape !== 'rsc' && Number(out.Hfront) === Number(out.Hback)) {
+  if (state.shape !== 'rsc' && state.shape !== 'tiandi' && Number(out.Hfront) === Number(out.Hback)) {
     out.Hback = Number(out.Hfront) + 150;
   }
   return out;
@@ -573,7 +616,8 @@ function safeDims(dims) {
 
 function render() {
   const dims = safeDims(state.dims);
-  lastNet = computeNet(dims, state.shape);
+  const isTiandi = state.shape === 'tiandi';
+  lastNet = computeNet(dims, state.shape, { piece: state.piece });
   clampAllElements();
 
   netApi = renderNet(dom.netHost, lastNet, {
@@ -583,8 +627,18 @@ function render() {
   });
   if (state.selected) netApi.select(state.selected);
 
-  if (state.shape === 'rsc') renderIso(dom.isoHost, dims, { unit: state.unit });
-  else {
+  if (isTiandi) {
+    // 天地盖的立体图按当前这一件画：天盖 / 地盖各是一个长方体
+    const pd = isTiandi ? lastNet.nets[state.piece].dims : null;
+    const suffix = state.piece === 'base' ? '(地)' : '(天)';
+    renderIso(dom.isoHost, { L: pd.L, W: pd.W, H: pd.H }, {
+      unit: state.unit,
+      dimLabels: { L: `L${suffix}`, W: `W${suffix}`, H: `H${suffix}` },
+    });
+    dom.isoHost.dataset.isoError = '';
+  } else if (state.shape === 'rsc') {
+    renderIso(dom.isoHost, dims, { unit: state.unit });
+  } else {
     try {
       renderIso(dom.isoHost, computeIsoShape(dims, state.shape), { unit: state.unit });
       dom.isoHost.dataset.isoError = '';
@@ -596,13 +650,15 @@ function render() {
   }
 
   const { L, W } = dims;
-  const hasFront = state.shape !== 'rsc';
+  const hasFront = state.shape === 'bevel' || state.shape === 'lshape';
   const geoDims = lastNet.dims;
   const u = state.unit;
   // 图上所有标注都按当前单位显示，内部仍是毫米
-  const isoDims = hasFront
-    ? `${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} × ${fmtLength(geoDims.Hfront, u)}/${fmtLength(geoDims.Hback, u)} ${unitSuffix(u)}`
-    : `${fmtLength(L, u)} × ${fmtLength(W, u)} × ${fmtLength(dims.H, u)} ${unitSuffix(u)}`;
+  const isoDims = isTiandi
+    ? `${lastNet.pieceLabel} ${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} × ${fmtLength(geoDims.H, u)} ${unitSuffix(u)}`
+    : hasFront
+      ? `${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} × ${fmtLength(geoDims.Hfront, u)}/${fmtLength(geoDims.Hback, u)} ${unitSuffix(u)}`
+      : `${fmtLength(L, u)} × ${fmtLength(W, u)} × ${fmtLength(dims.H, u)} ${unitSuffix(u)}`;
   dom.isoMeta.textContent = isoDims;
 
   // 轮廓图下方：体积与周长（单位固定 CBM / 英寸，不跟顶部单位切换走）
@@ -618,15 +674,19 @@ function render() {
     : '';
   dom.netSize.textContent =
     `展开 ${withUnit(lastNet.width, u)} × ${withUnit(lastNet.height, u)} · ` +
-    (hasFront
-      ? `箱身 ${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} · 高 ${fmtLength(geoDims.Hfront, u)}/${fmtLength(geoDims.Hback, u)} · ${lidText}`
-      : `箱身 ${fmtLength(L, u)}/${fmtLength(W, u)} × ${fmtLength(dims.H, u)} · ` +
-        `主摇盖 ${fmtLength(L, u)} × ${fmtLength(lastNet.flap, u)} · 防尘摇盖 ${fmtLength(W, u)} × ${fmtLength(lastNet.flap, u)}（不印）`);
+    (isTiandi
+      ? `${lastNet.pieceLabel} ${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} · 翻边高 ${fmtLength(geoDims.H, u)}`
+      : hasFront
+        ? `箱身 ${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} · 高 ${fmtLength(geoDims.Hfront, u)}/${fmtLength(geoDims.Hback, u)} · ${lidText}`
+        : `箱身 ${fmtLength(L, u)}/${fmtLength(W, u)} × ${fmtLength(dims.H, u)} · ` +
+          `主摇盖 ${fmtLength(L, u)} × ${fmtLength(lastNet.flap, u)} · 防尘摇盖 ${fmtLength(W, u)} × ${fmtLength(lastNet.flap, u)}（不印）`);
 
   const panelCount = Object.keys(lastNet.panels).length;
   const editableCount = Object.values(lastNet.panels).filter((p) => p.editable).length;
   if (dom.netTitle) {
-    dom.netTitle.textContent = `展开图 · ${panelCount} 个区域 / ${editableCount} 个可编辑面`;
+    dom.netTitle.textContent = isTiandi
+      ? `展开图 · ${lastNet.pieceLabel} · ${panelCount} 个区域 / ${editableCount} 个可编辑面`
+      : `展开图 · ${panelCount} 个区域 / ${editableCount} 个可编辑面`;
   }
   if (dom.footnote) {
     dom.footnote.textContent =
@@ -634,7 +694,9 @@ function render() {
         ? '虚线为折叠线，实线为裁切线。顶部是两片对开摇盖（前后各一片，每片 600 宽、深 = 斜面实长 √(W²+ΔH²) 的一半，两片合计 = 斜长）；底面 2 片主摇盖加 2 片侧面防尘摇盖（仅结构件，不印箱唛）；内部一律按真实毫米计算。'
         : state.shape === 'lshape'
           ? '虚线为折叠线，实线为裁切线。顶部是从前面板翻过去的一整片单摇盖（深度 = W前 + |ΔH| + W后，片内两条折线画虚线）；底面 2 片主摇盖加 2 片侧面防尘摇盖（仅结构件，不印箱唛）；内部一律按真实毫米计算。'
-          : '虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，仅结构件，不印箱唛）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。';
+          : state.shape === 'tiandi'
+            ? '天地盖是两件套，各印一张：天盖顶面 + 四条翻边共 5 个可编辑面，地盖只印底面 1 个可编辑面（地盖四条翻边只画轮廓，不印箱唛）。地盖尺寸自动派生：长、宽各比天盖小 20mm，高小 10mm。虚线为折叠线，实线为裁切线，内部一律按真实毫米计算。'
+            : '虚线为折叠线，实线为裁切线。展开图 = (2L + 2W) × (H + W)：4 个箱身面（L×H / W×H 交替）+ 4 片主摇盖（L × W/2，前/后对开拼成顶面）+ 4 片防尘摇盖（W × W/2，仅结构件，不印箱唛）；摇盖深 = W ÷ 2，内部一律按真实毫米计算。';
   }
 
   updateSelectionInfo();
@@ -659,7 +721,7 @@ function syncEditor() {
   const meta = geo;
   dom.editorCard.hidden = false;
   dom.editorTitle.textContent = meta.label;
-  dom.editorSub.textContent = `${SLOT_LABELS[meta.slot]} · ${fmt(geo.w)} × ${fmt(geo.h)} mm`;
+  dom.editorSub.textContent = `${meta.slotLabel || SLOT_LABELS[meta.slot]} · ${fmt(geo.w)} × ${fmt(geo.h)} mm`;
   fillCopyTargets();
   editor.setPanel(state.selected, geo, state.panels[state.selected].elements);
   renderProps();
@@ -731,7 +793,7 @@ function updateSelectionInfo() {
   const p = lastNet.panels[state.selected];
   const meta = p;
   const count = state.panels[state.selected].elements.length;
-  dom.selInfo.textContent = `正在编辑：${meta.label}（${SLOT_LABELS[p.kind]}）· ${fmt(p.w)} × ${fmt(p.h)} mm · ${count} 个元素`;
+  dom.selInfo.textContent = `正在编辑：${meta.label}（${p.slotLabel || SLOT_LABELS[p.kind]}）· ${fmt(p.w)} × ${fmt(p.h)} mm · ${count} 个元素`;
   dom.selInfo.classList.add('is-active');
 }
 
@@ -1096,6 +1158,11 @@ async function refreshExportSummary() {
   if (stats.elementCount === 0) {
     warn('还没有任何箱唛内容，先加文字或图片再导出。', 'is-error');
   }
+  // 天地盖要出两张不同尺寸的展开图（天盖 / 地盖各一页），导出正在接，先别放半截 PDF 出去
+  const tiandiPending = state.shape === 'tiandi';
+  if (tiandiPending) {
+    warn('天地盖的 PDF 导出（天盖、地盖各一页 1:1）正在接，当前版本先出了图；确认图无误后就上线。', 'is-error');
+  }
   if (stats.tilePlan) {
     warn(`拼版共 ${stats.tilePlan.tiles.length} 块，每块边角有裁切标记，块上标了「接边」方向；拼接后即为 1:1 整图。`);
   }
@@ -1112,7 +1179,7 @@ async function refreshExportSummary() {
     }
   }
 
-  dom.exportConfirmBtn.disabled = stats.elementCount === 0;
+  dom.exportConfirmBtn.disabled = stats.elementCount === 0 || state.shape === 'tiandi';
 }
 
 async function submitExport(ev) {
@@ -1171,6 +1238,23 @@ function bindEvents() {
     const btn = ev.target.closest('button[data-unit]');
     if (btn) switchUnit(btn.dataset.unit);
   });
+
+  // 天地盖：在天盖 / 地盖两张展开图之间切换
+  if (dom.pieceToggle) {
+    dom.pieceToggle.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-piece]');
+      if (!btn) return;
+      const piece = btn.dataset.piece === 'base' ? 'base' : 'lid';
+      if (piece === state.piece) return;
+      state.piece = piece;
+      state.selected = null;
+      state.selectedElement = null;
+      closeEditor();
+      updateShapeChrome();
+      render();
+      persistSoon();
+    });
+  }
 
   dom.resetBtn.addEventListener('click', () => {
     // 重置 = 尺寸回到当前箱型示例 + 清空所有箱唛内容（用户 2026-11-01 要求）

@@ -56,7 +56,7 @@
 
   <span class="divider" aria-hidden="true"></span>
 
-  <div class="field field--dim">
+  <div class="field field--dim" id="fieldL">
     <label class="label" for="dimL">长 L</label>
     <div class="input-wrap">
       <input id="dimL" name="L" type="number" inputmode="decimal" step="1" min="1" autocomplete="off">
@@ -127,6 +127,31 @@
     </div>
   </div>
 
+  <!-- 天地盖：地盖三个尺寸自动派生（长宽各 −20mm、高 −10mm），只读 -->
+  <div class="field field--dim" id="fieldLBase" data-shape-fields="tiandi" hidden>
+    <span class="label" title="L(地) = L(天) − 20mm，自动计算">长 L(地)</span>
+    <div class="input-wrap">
+      <span class="derived-value" id="dimLBase">—</span>
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+  </div>
+
+  <div class="field field--dim" id="fieldWBase" data-shape-fields="tiandi" hidden>
+    <span class="label" title="W(地) = W(天) − 20mm，自动计算">宽 W(地)</span>
+    <div class="input-wrap">
+      <span class="derived-value" id="dimWBase">—</span>
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+  </div>
+
+  <div class="field field--dim" id="fieldHBase" data-shape-fields="tiandi" hidden>
+    <span class="label" title="H(地) = H(天) − 10mm，自动计算">高 H(地)</span>
+    <div class="input-wrap">
+      <span class="derived-value" id="dimHBase">—</span>
+      <span class="suffix" data-unit-suffix>mm</span>
+    </div>
+  </div>
+
   <div class="field field--actions">
     <button type="button" class="btn" id="resetBtn">重置</button>
   </div>
@@ -165,6 +190,10 @@
   <section class="card">
     <div class="card-head">
       <h2 id="netTitle">展开图</h2>
+      <div class="segmented piece-toggle" id="pieceToggle" role="group" aria-label="天盖 / 地盖切换" hidden>
+        <button type="button" data-piece="lid" class="is-active" aria-pressed="true">天盖</button>
+        <button type="button" data-piece="base" aria-pressed="false">地盖</button>
+      </div>
       <span class="card-meta" id="netMeta">—</span>
     </div>
     <div class="canvas canvas--net" id="netHost" aria-label="箱体展开图，点击可编辑面进入编辑"></div>

@@ -41,11 +41,12 @@ export function listShapeGeometries() {
  * 计算展开图。面板列表完全来自几何函数，不存在“只认 RSC”的硬编码。
  * @param {{L:number,W:number,H:number}} dims 毫米
  * @param {string} shapeId 箱型 id，默认 rsc
+ * @param {{piece?:string}} [opts] 多件套箱型（天地盖）选哪一件；其他箱型忽略
  */
-export function computeNet(dims, shapeId = 'rsc') {
+export function computeNet(dims, shapeId = 'rsc', opts = {}) {
   const compute = SHAPE_GEOMETRY.get(shapeId);
   if (!compute) throw new Error(`未注册的箱型几何：${shapeId}`);
-  return compute(dims, shapeId);
+  return compute(dims, shapeId, opts);
 }
 
 function panel(label, kind, x, y, w, h) {

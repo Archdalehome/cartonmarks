@@ -77,7 +77,7 @@ export function renderNet(host, net, opts = {}) {
       'data-slot': p.kind,
       'aria-label': editable
         ? `${meta.label}，${Math.round(p.w)} × ${Math.round(p.h)} 毫米`
-        : `${meta.label}（防尘摇盖，不参与箱唛）`,
+        : `${meta.label.replace(/（不印）$/, '')}（不参与箱唛）`,
       ...(editable
         ? { tabindex: '0', role: 'button' }
         : { 'aria-disabled': 'true' }),
@@ -164,47 +164,64 @@ export function renderNet(host, net, opts = {}) {
 
   /* 5. 尺寸线：总宽 / 总高 / L / W / H（图太小的时候只留总尺寸，避免文字打架） */
   const compact = drawW < 430;
-  dimLine(root, {
-    a: { x: X(0), y: Y(0) },
-    b: { x: X(net.width), y: Y(0) },
-    label: withUnit(net.width, unit),
-    offset: 30,
-    center,
-    className: 'is-strong',
-  });
-  dimLine(root, {
-    a: { x: X(0), y: Y(0) },
-    b: { x: X(0), y: Y(net.height) },
-    label: withUnit(net.height, unit),
-    offset: 30,
-    center,
-    className: 'is-strong',
-  });
-  if (!compact) {
+  if (Array.isArray(net.dimMarks) && net.dimMarks.length) {
+    // 十字展开图（天地盖）这类形状自己给尺寸线：总尺寸不在左上角
+    for (const m of net.dimMarks) {
+      const label = m.text ? `${m.text} ${fmtLength(m.mm, unit)}` : withUnit(m.mm, unit);
+      dimLine(root, {
+        a: { x: X(m.a[0]), y: Y(m.a[1]) },
+        b: { x: X(m.b[0]), y: Y(m.b[1]) },
+        label,
+        offset: m.offset || 30,
+        center,
+        className: m.strong ? 'is-strong' : '',
+        extA: m.extA ? { x: X(m.extA[0]), y: Y(m.extA[1]) } : null,
+        extB: m.extB ? { x: X(m.extB[0]), y: Y(m.extB[1]) } : null,
+      });
+    }
+  } else {
     dimLine(root, {
-      a: { x: X(0), y: Y(net.height) },
-      b: { x: X(net.dims.L), y: Y(net.height) },
-      label: `L ${fmtLength(net.dims.L, unit)}`,
-      offset: 32,
+      a: { x: X(0), y: Y(0) },
+      b: { x: X(net.width), y: Y(0) },
+      label: withUnit(net.width, unit),
+      offset: 30,
       center,
+      className: 'is-strong',
     });
     dimLine(root, {
-      a: { x: X(net.dims.L), y: Y(net.height) },
-      b: { x: X(net.dims.L + net.dims.W), y: Y(net.height) },
-      label: `W ${fmtLength(net.dims.W, unit)}`,
-      offset: 32,
+      a: { x: X(0), y: Y(0) },
+      b: { x: X(0), y: Y(net.height) },
+      label: withUnit(net.height, unit),
+      offset: 30,
       center,
+      className: 'is-strong',
     });
-    dimLine(root, {
-      a: { x: X(net.width), y: Y(net.bodyTop) },
-      b: { x: X(net.width), y: Y(net.bodyBottom) },
-      label:
-        net.dims.Hfront != null
-          ? `H 前 ${fmtLength(net.dims.Hfront, unit)} / 后 ${fmtLength(net.dims.Hback, unit)}`
-          : `H ${fmtLength(net.dims.H, unit)}`,
-      offset: 26,
-      center,
-    });
+    if (!compact) {
+      dimLine(root, {
+        a: { x: X(0), y: Y(net.height) },
+        b: { x: X(net.dims.L), y: Y(net.height) },
+        label: `L ${fmtLength(net.dims.L, unit)}`,
+        offset: 32,
+        center,
+      });
+      dimLine(root, {
+        a: { x: X(net.dims.L), y: Y(net.height) },
+        b: { x: X(net.dims.L + net.dims.W), y: Y(net.height) },
+        label: `W ${fmtLength(net.dims.W, unit)}`,
+        offset: 32,
+        center,
+      });
+      dimLine(root, {
+        a: { x: X(net.width), y: Y(net.bodyTop) },
+        b: { x: X(net.width), y: Y(net.bodyBottom) },
+        label:
+          net.dims.Hfront != null
+            ? `H 前 ${fmtLength(net.dims.Hfront, unit)} / 后 ${fmtLength(net.dims.Hback, unit)}`
+            : `H ${fmtLength(net.dims.H, unit)}`,
+        offset: 26,
+        center,
+      });
+    }
   }
 
   host.replaceChildren(root);

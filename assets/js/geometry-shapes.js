@@ -451,3 +451,156 @@ registerShapeGeometry('bevel', computeBevel);
 registerShapeGeometry('lshape', computeLShape);
 
 export { computeBevel, computeLShape };
+
+/* ── 天地盖（天盖 + 地盖，两件套） ───────────────────────
+ *
+ * 用户口径（2026-11-01）：只输 L(天) / W(天) / H(天)，
+ * 地盖 = 长宽各 −20mm、高 −10mm，自动派生（能套进天盖里）。
+ *
+ * 每件都是一张「十字」展开图：中间是顶（底）面，四边各翻一条 H 深的翻边。
+ *   总宽 = L + 2H，总高 = W + 2H
+ *
+ *      [底]            ← 后翻边  L × H
+ *   [左][顶][右]        ← 左/右翻边 H × W，顶面 L × W
+ *      [正]            ← 前翻边  L × H
+ *
+ * 可编辑面 6 个：天盖的顶/正/底/左/右 + 地盖的「反」（地盖底面）。
+ * 地盖的四条翻边只画轮廓，不进箱唛、不进 PDF。
+ */
+
+/** 地盖相对天盖的收口（毫米） */
+export const TIANDI_GAP_LW = 20;
+export const TIANDI_GAP_H = 10;
+
+/** 天地盖派生尺寸：天地两件的 L / W / H */
+export function tiandiDerived(dims) {
+  const lid = { L: pos(dims.L, 1), W: pos(dims.W, 1), H: pos(dims.H, 1) };
+  const base = {
+    L: Math.max(1, lid.L - TIANDI_GAP_LW),
+    W: Math.max(1, lid.W - TIANDI_GAP_LW),
+    H: Math.max(1, lid.H - TIANDI_GAP_H),
+  };
+  return { lid, base };
+}
+
+function tiandiPiece(piece, d) {
+  const { L, W, H } = d;
+  const isLid = piece !== 'base';
+
+  const x0 = 0;
+  const x1 = H;
+  const x2 = H + L;
+  const x3 = L + 2 * H;
+  const y0 = 0;
+  const y1 = H;
+  const y2 = H + W;
+  const y3 = W + 2 * H;
+
+  const name = isLid ? '天盖' : '地盖';
+  const suffix = isLid ? '(天)' : '(地)';
+  const panels = {};
+
+  // 中间那一面：天盖是顶、地盖是底（用户图上叫「地盖反」）
+  panels[isLid ? 'lidTop' : 'baseTop'] = {
+    ...rectPanel(`${name}${isLid ? '顶' : '反'}箱唛`, 'body', x1, y1, L, W),
+    slotLabel: isLid ? '顶面' : '底面',
+  };
+
+  const edges = [
+    { key: 'Back', label: '底', x: x1, y: y0, w: L, h: H },
+    { key: 'Front', label: '正', x: x1, y: y2, w: L, h: H },
+    { key: 'Left', label: '左', x: x0, y: y1, w: H, h: W },
+    { key: 'Right', label: '右', x: x2, y: y1, w: H, h: W },
+  ];
+  for (const e of edges) {
+    const key = isLid ? `lid${e.key}` : `baseFlap${e.key}`;
+    // 天盖四面都印，地盖只印底面那一块，翻边只画轮廓
+    panels[key] = isLid
+      ? { ...rectPanel(`${name}${e.label}箱唛`, 'major', e.x, e.y, e.w, e.h), slotLabel: '翻边' }
+      : rectPanel(`${name}${e.label}（不印）`, 'minor', e.x, e.y, e.w, e.h);
+  }
+
+  const folds = [
+    hFold(x1, x2, y1), // 顶(底)面 ↔ 后翻边
+    hFold(x1, x2, y2), // 顶(底)面 ↔ 前翻边
+    vFold(x1, y1, y2), // 左翻边
+    vFold(x2, y1, y2), // 右翻边
+  ];
+
+  const outline = [
+    [x1, y0],
+    [x2, y0],
+    [x2, y1],
+    [x3, y1],
+    [x3, y2],
+    [x2, y2],
+    [x2, y3],
+    [x1, y3],
+    [x1, y2],
+    [x0, y2],
+    [x0, y1],
+    [x1, y1],
+  ];
+
+  const width = L + 2 * H;
+  const height = W + 2 * H;
+
+  // 十字展开图的尺寸线：总宽在下方、总高在左侧，L/W/H 贴各自的边
+  const dimMarks = [
+    { a: [x1, y0], b: [x2, y0], text: `L${suffix}`, mm: L, offset: 28 },
+    { a: [x3, y1], b: [x3, y2], text: `W${suffix}`, mm: W, offset: 28 },
+    { a: [x1, y2], b: [x1, y3], text: `H${suffix}`, mm: H, offset: 26 },
+    // 总尺寸落在十字外面，延长线从左右两条翻边真正的角上引下来
+    { a: [x0, y3], b: [x3, y3], extA: [x0, y2], extB: [x3, y2], mm: width, offset: 34, strong: true },
+    { a: [x0, y0], b: [x0, y3], mm: height, offset: 34, strong: true },
+  ];
+
+  return {
+    piece: isLid ? 'lid' : 'base',
+    pieceLabel: name,
+    width,
+    height,
+    flap: H,
+    flapDepth: H,
+    bodyTop: y1,
+    bodyBottom: y2,
+    panels,
+    outline,
+    folds,
+    cuts: [],
+    dimMarks,
+    dims: { L, W, H },
+  };
+}
+
+/**
+ * 天地盖：一次算出天盖与地盖两张展开图。
+ * opts.piece 选当前显示哪一张（'lid' 默认 / 'base'），两张都可编辑、可导出。
+ */
+export function computeTiandi(dims, shapeId, opts = {}) {
+  const { lid, base } = tiandiDerived(dims);
+  const nets = {
+    lid: tiandiPiece('lid', lid),
+    base: tiandiPiece('base', base),
+  };
+  const piece = opts && opts.piece === 'base' ? 'base' : 'lid';
+  const active = nets[piece];
+
+  return {
+    ...active,
+    shape: shapeId || 'tiandi',
+    shapeName: '天地盖（天盖 + 地盖）',
+    piece,
+    pieceList: [
+      { id: 'lid', label: '天盖' },
+      { id: 'base', label: '地盖' },
+    ],
+    nets,
+    derived: { lid, base },
+    // 两个件的可编辑面合在一起，切换天/地盖时内容不会互相覆盖丢掉
+    allPanels: { ...nets.lid.panels, ...nets.base.panels },
+  };
+}
+
+registerShapeGeometry('tiandi', computeTiandi);
+

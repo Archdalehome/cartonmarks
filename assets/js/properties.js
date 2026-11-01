@@ -1,4 +1,4 @@
-﻿/**
+/**
  * properties.js —— 右侧属性面板
  * 纯 DOM 渲染 + 回调，不持有状态。
  */
@@ -46,7 +46,7 @@ export function renderProperties(host, ctx) {
       h('div', { class: 'prop-row' }, [h('label', { text: '名称' }), h('span', { text: panelMeta.label })]),
       h('div', { class: 'prop-row' }, [
         h('label', { text: '类型' }),
-        h('span', { text: SLOT_LABELS[panelMeta.slot] || '' }),
+        h('span', { text: panelMeta.slotLabel || SLOT_LABELS[panelMeta.slot] || '' }),
       ]),
       h('div', { class: 'prop-row' }, [
         h('label', { text: '尺寸' }),

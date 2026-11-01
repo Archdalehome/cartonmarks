@@ -89,7 +89,7 @@ export function ensureDefs(root) {
  * @param {{x:number,y:number}} [p.center] 参考中心，用于让尺寸线朝外避让
  * @param {string} [p.className] 文字附加类名
  */
-export function dimLine(root, { a, b, label, offset = 24, center = null, className = '' }) {
+export function dimLine(root, { a, b, label, offset = 24, center = null, className = '', extA = null, extB = null }) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -108,8 +108,12 @@ export function dimLine(root, { a, b, label, offset = 24, center = null, classNa
   const oa = { x: a.x + nx * offset, y: a.y + ny * offset };
   const ob = { x: b.x + nx * offset, y: b.y + ny * offset };
 
-  root.appendChild(line(a.x, a.y, oa.x, oa.y, { class: 'dim-ext' }));
-  root.appendChild(line(b.x, b.y, ob.x, ob.y, { class: 'dim-ext' }));
+  // extA / extB：延长线的起点可以和尺寸线端点不同。
+  // 十字展开图（天地盖）的总尺寸线落在轮廓外面，但延长线要从真正的角上引出去。
+  const ea = extA || a;
+  const eb = extB || b;
+  root.appendChild(line(ea.x, ea.y, oa.x, oa.y, { class: 'dim-ext' }));
+  root.appendChild(line(eb.x, eb.y, ob.x, ob.y, { class: 'dim-ext' }));
   root.appendChild(
     line(oa.x, oa.y, ob.x, ob.y, {
       class: 'dim-line',

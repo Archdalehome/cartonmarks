@@ -12,6 +12,10 @@
 const MM3_PER_CBM = 1e9; // 1 m³ = 1e9 mm³
 const MM_PER_INCH = 25.4;
 
+/** 天地盖的地盖比天盖收口多少（与 geometry-shapes.js 同一口径） */
+const TIANDI_GAP_LW = 20;
+const TIANDI_GAP_H = 10;
+
 const num = (v) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -29,7 +33,7 @@ export function fmt2(v) {
 
 /**
  * @param {{L?:number,W?:number,H?:number,Hfront?:number,Hback?:number,Wfront?:number,Wback?:number}} dims
- * @param {'rsc'|'lshape'|'bevel'} shape
+ * @param {'rsc'|'lshape'|'bevel'|'tiandi'} shape
  * @returns {{maxCbm:number|null, realCbm:number|null, perimeterIn:number|null, sides:{L:number,W:number,H:number}|null}}
  */
 export function computeMetrics(dims, shape = 'rsc') {
@@ -55,7 +59,7 @@ export function computeMetrics(dims, shape = 'rsc') {
 
   const Hf = num(dims.Hfront);
   const Hb = num(dims.Hback);
-  const Hmax = shape === 'rsc' ? H : Math.max(Hf || 0, Hb || 0) || H;
+  const Hmax = shape === 'rsc' || shape === 'tiandi' ? H : Math.max(Hf || 0, Hb || 0) || H;
 
   const maxCbm = round2((L * W * Hmax) / MM3_PER_CBM);
 
@@ -65,6 +69,13 @@ export function computeMetrics(dims, shape = 'rsc') {
   } else if (shape === 'bevel') {
     // 梯形棱柱：截面积 = W × (H前 + H后) / 2
     realMm3 = (L * W * (Hf + Hb)) / 2;
+  } else if (shape === 'tiandi') {
+    // 天地盖：实际能装的容积按地盖算（Chief 口径）。
+    // 壁厚没给，按地盖外尺寸当内腔——地盖 = 长宽各 −20、高 −10
+    const baseL = num(L - TIANDI_GAP_LW) || 0;
+    const baseW = num(W - TIANDI_GAP_LW) || 0;
+    const baseH = num(H - TIANDI_GAP_H) || 0;
+    realMm3 = baseL * baseW * baseH || null;
   } else {
     // L 形：两级台阶，按深度分段乘各自高度
     const wf = num(dims.Wfront);
