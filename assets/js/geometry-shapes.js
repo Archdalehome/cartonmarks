@@ -378,32 +378,87 @@ export function computeIsoShape(dims, shapeId) {
     return { j, normal: { y: ny, z: nz }, visible: ny + nz > 1e-9 };
   });
 
-  const faces = [];
+  // 所有面（含背面），可见性按相机方向 (1,1,1) 判断，不写死几条棱
+  const allFaces = [];
   for (const s of sides) {
-    if (!s.visible) continue;
     const j = s.j;
     const k = (j + 1) % n;
-    faces.push({
+    allFaces.push({
       id: 'side' + j,
       points: ['a' + j, 'b' + j, 'b' + k, 'a' + k],
+      visible: s.visible,
       fill: s.normal.z > s.normal.y ? '#eef2f7' : '#e6ecf4',
     });
   }
-  // 右端面（X = L，朝观察者）
-  faces.unshift({
-    id: 'end',
-    points: profile.map((_, j) => 'b' + j),
-    fill: '#f2f5f9',
-  });
+  allFaces.push({ id: 'endFar', points: profile.map((_, j) => 'a' + j), visible: false, fill: '#f2f5f9' });
+  allFaces.push({ id: 'endNear', points: profile.map((_, j) => 'b' + j), visible: true, fill: '#f2f5f9' });
+
+  const faces = allFaces.filter((f) => f.visible);
+
+  // 深度：正交投影沿 (1,1,1) 看，X+Y+Z 越大越靠近观察者
+  const depthOf = (id) => {
+    const c = corners3d[id];
+    return c.X + c.Y + c.Z;
+  };
+  const projectedPolygon = (face) => face.points.map((id) => corners[id]);
+
+  /** 点是否在多边形内（射线法）；poly 已按质心缩过一点，避免共边误判 */
+  function pointInPolygon(pt, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+      const a = poly[i];
+      const b = poly[j];
+      const hit =
+        a.y > pt.y !== b.y > pt.y &&
+        pt.x < ((b.x - a.x) * (pt.y - a.y)) / (b.y - a.y || 1e-12) + a.x;
+      if (hit) inside = !inside;
+    }
+    return inside;
+  }
+
+  function shrinkPolygon(poly, k = 0.985) {
+    const cx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+    const cy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
+    return poly.map((p) => ({ x: cx + (p.x - cx) * k, y: cy + (p.y - cy) * k }));
+  }
+
+  /** 一条棱是否被别的可见面挡住 */
+  function isOccluded(a, b, adjacent) {
+    const mid = { x: (corners[a].x + corners[b].x) / 2, y: (corners[a].y + corners[b].y) / 2 };
+    const edgeDepth = (depthOf(a) + depthOf(b)) / 2;
+    for (const face of faces) {
+      if (adjacent.includes(face.id)) continue;
+      const poly = shrinkPolygon(projectedPolygon(face));
+      if (!pointInPolygon(mid, poly)) continue;
+      const faceDepth =
+        face.points.reduce((s, id) => s + depthOf(id), 0) / face.points.length;
+      if (faceDepth > edgeDepth + 1e-6) return true;
+    }
+    return false;
+  }
 
   const edges = [];
   for (let j = 0; j < n; j += 1) {
     const k = (j + 1) % n;
-    edges.push({ a: 'b' + j, b: 'b' + k, hidden: false }); // 右端轮廓
-    edges.push({ a: 'a' + j, b: 'a' + k, hidden: true }); // 左端轮廓
-    const prev = sides[(j - 1 + n) % n].visible;
-    const cur = sides[j].visible;
-    edges.push({ a: 'a' + j, b: 'b' + j, hidden: !(prev || cur) });
+    // 近端轮廓（X = L）：相邻面是端面与第 j 个侧面
+    edges.push({
+      a: 'b' + j,
+      b: 'b' + k,
+      hidden: !sides[j].visible && isOccluded('b' + j, 'b' + k, ['endNear', 'side' + j]),
+    });
+    // 远端轮廓（X = 0）：不再一律虚线，按是否被遮挡判定
+    edges.push({
+      a: 'a' + j,
+      b: 'a' + k,
+      hidden: isOccluded('a' + j, 'a' + k, ['endFar', 'side' + j]),
+    });
+    // 沿长度方向的长棱：相邻的是左右两个侧面
+    const prev = sides[(j - 1 + n) % n];
+    edges.push({
+      a: 'a' + j,
+      b: 'b' + j,
+      hidden: isOccluded('a' + j, 'b' + j, ['side' + prev.j, 'side' + j]),
+    });
   }
 
   const idx = (Ywant, Zwant) =>

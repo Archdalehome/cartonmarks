@@ -6,9 +6,10 @@
  * 12 个区域：4 箱身面 + 4 主摇盖（L×W/2）+ 4 防尘摇盖（W×W/2）。
  */
 import assert from 'node:assert/strict';
-import { computeNet, registerShapeGeometry, listShapeGeometries } from '../assets/js/geometry.js';
+import { computeNet, computeIso, registerShapeGeometry, listShapeGeometries } from '../assets/js/geometry.js';
 import { createPanels } from '../assets/js/project.js';
 import '../assets/js/geometry-shapes.js';
+import { computeIsoShape } from '../assets/js/geometry-shapes.js';
 import { checkClosure, innerFolds } from './closure-check.mjs';
 
 let passed = 0;
@@ -365,6 +366,41 @@ check('前后高度任意组合都闭合（H后 < H前 也成立）', () => {
     const r = checkClosure(n, 'lshape', d);
     assert.ok(r.ok, r.errors.join('；'));
   }
+});
+
+console.log('等轴测可见性（不写死虚线数量）');
+
+const edgeById = (iso, a, b) =>
+  iso.edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+
+check('L 形箱：台阶竖棱、顶面交线在等轴测里是实线', () => {
+  const iso = computeIsoShape(lshapeDims, 'lshape');
+  // 远端竖壁竖棱（剖面点 3→4 在 X=0 那一侧）
+  assert.equal(edgeById(iso, 'a3', 'a4')?.hidden, false, '远端竖壁竖棱应为实线');
+  // 后段顶面与后箱面的交线（沿长度方向，剖面点 4）
+  assert.equal(edgeById(iso, 'a4', 'b4')?.hidden, false, '后段顶面交线应为实线');
+  // 台阶两顶面的分界（沿长度方向，剖面点 3）
+  assert.equal(edgeById(iso, 'a3', 'b3')?.hidden, false, '台阶顶面分界应为实线');
+  // 远端后段顶棱
+  assert.equal(edgeById(iso, 'a4', 'a5')?.hidden, false, '远端顶棱应为实线');
+});
+
+check('L 形箱：只有真正被挡住的底棱/背棱走虚线', () => {
+  const iso = computeIsoShape(lshapeDims, 'lshape');
+  assert.equal(edgeById(iso, 'a0', 'a1')?.hidden, true, '底面远棱应被挡住');
+  assert.equal(edgeById(iso, 'a5', 'a0')?.hidden, true, '远端背面竖棱应被挡住');
+  assert.equal(iso.edges.filter((e) => e.hidden).length, 2);
+});
+
+check('斜形箱：斜顶远端棱实线，背面下沿虚线', () => {
+  const iso = computeIsoShape(bevelDims, 'bevel');
+  assert.equal(edgeById(iso, 'a2', 'a3')?.hidden, false, '斜顶远端棱应为实线');
+  assert.equal(edgeById(iso, 'a3', 'a0')?.hidden, true, '远端背面竖棱应被挡住');
+});
+
+check('矩形箱仍按老规则：恰好 3 条背棱虚线', () => {
+  const iso = computeIso({ L: 600, W: 400, H: 300 });
+  assert.equal(iso.edges.filter((e) => e.hidden).length, 3);
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);
