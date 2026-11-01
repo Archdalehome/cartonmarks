@@ -1,100 +1,76 @@
 /**
  * pdf-plan.js —— PDF 导出的纯计算（不含 jsPDF / DOM，方便离线断言）
  *
- * 页面尺寸 = 展开图真实毫米 (2L + 2W) × (H + W)，1:1。
- * PDF 1.7 单页上限 14400 pt ≈ 5080 mm，超出的箱子只能等比缩到上限并提示。
+ * 导出只有一种方式：整张展开图一页。
+ * 页面尺寸 = 展开图尺寸 × (1 + 2 × 5%)，图形仍按 1:1 真实毫米绘制、居中放在页面里，
+ * 所以四周各留 5% 空白，用户按「实际大小」打印出来尺寸依然准确。
+ * PDF 1.7 单页上限 14400 pt ≈ 5080 mm，超过就把整页等比缩到上限并提示。
  */
 
 export const PDF_MAX_MM = 5080;
 export const MIN_DPI = 150;
 
-/** A4 / A3 纸张（毫米，竖放） */
-export const PAPER_SIZES = {
-  a4: { id: 'a4', name: 'A4', width: 210, height: 297 },
-  a3: { id: 'a3', name: 'A3', width: 297, height: 420 },
-};
+/** 页面四周留白（占页面边长的比例，每边 5%） */
+export const PAGE_PADDING_RATIO = 0.05;
 
-/** 拼版时四周留白（放裁切标记和「接哪边」提示） */
-export const TILE_MARGIN_MM = 8;
-
-export const EXPORT_MODES = {
-  sheet: '整张展开图（一页，1:1）',
-  panel: '每个有内容的面各一页',
-  tile: 'A3/A4 拼版（1:1，多张拼接）',
-};
+/** A4 横向（毫米）——当前 UI 默认用它 */
+export const A4_LANDSCAPE = { width: 297, height: 210 };
 
 /**
- * 把展开图按纸张切成若干块，1:1 不缩放。
- * 每块给出：覆盖的展开图区域、纸张上的落点、以及上下左右是否有邻块。
+ * 精确 1:1 打印用的页面：展开图 × (1 + 2×5%)，图形 1:1 居中。
+ * 目前 UI 不再调用（导出走 A4 横向等比缩放），**保留供将来恢复精确打印**：
+ * exportPdf 传 layout: 'exact' 即可，测试也还在。
+ * @param {{width:number,height:number}} net
  */
-export function planTiles(net, paperId = 'a3') {
-  const paper = PAPER_SIZES[paperId] || PAPER_SIZES.a3;
-  // 让纸张朝向尽量贴合展开图
-  const portrait = { w: paper.width, h: paper.height };
-  const landscape = { w: paper.height, h: paper.width };
-  const useLandscape = net.width / net.height > portrait.w / portrait.h;
-  const page = useLandscape ? landscape : portrait;
-
-  const usableW = page.w - TILE_MARGIN_MM * 2;
-  const usableH = page.h - TILE_MARGIN_MM * 2;
-  const cols = Math.max(1, Math.ceil(net.width / usableW));
-  const rows = Math.max(1, Math.ceil(net.height / usableH));
-
-  const tiles = [];
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      const x = col * usableW;
-      const y = row * usableH;
-      tiles.push({
-        row,
-        col,
-        index: row * cols + col + 1,
-        total: rows * cols,
-        // 这一块覆盖的展开图区域（毫米）
-        x,
-        y,
-        w: Math.min(usableW, net.width - x),
-        h: Math.min(usableH, net.height - y),
-        // 纸面落点
-        px: TILE_MARGIN_MM,
-        py: TILE_MARGIN_MM,
-        hasLeft: col > 0,
-        hasRight: col < cols - 1,
-        hasTop: row > 0,
-        hasBottom: row < rows - 1,
-        rows,
-        cols,
-      });
-    }
-  }
-
+export function computePageSize(net) {
+  const factor = 1 + PAGE_PADDING_RATIO * 2;
+  const longest = Math.max(net.width, net.height) * factor;
+  const scale = longest > PDF_MAX_MM ? PDF_MAX_MM / longest : 1;
+  const drawWidth = net.width * scale;
+  const drawHeight = net.height * scale;
   return {
-    paper: paper.id,
-    paperName: paper.name,
-    pageWidth: page.w,
-    pageHeight: page.h,
-    usableW,
-    usableH,
-    margin: TILE_MARGIN_MM,
-    rows,
-    cols,
-    tiles,
+    width: net.width * factor * scale,
+    height: net.height * factor * scale,
+    drawWidth,
+    drawHeight,
+    offsetX: (net.width * factor * scale - drawWidth) / 2,
+    offsetY: (net.height * factor * scale - drawHeight) / 2,
+    scale,
+    scaled: scale < 1,
+    limit: PDF_MAX_MM,
+    padding: PAGE_PADDING_RATIO,
+    layout: 'exact',
   };
 }
 
 /**
+ * A4 横向：页面固定 297 × 210，四周留 5%（左右各 14.85、上下各 10.5），
+ * 展开图等比缩到可用区里居中，不裁切、不拉伸。
  * @param {{width:number,height:number}} net
- * @returns {{width:number,height:number,scale:number,scaled:boolean,limit:number}}
  */
-export function computePageSize(net) {
-  const longest = Math.max(net.width, net.height);
-  const scale = longest > PDF_MAX_MM ? PDF_MAX_MM / longest : 1;
+export function computeA4Page(net, paper = A4_LANDSCAPE) {
+  const marginX = paper.width * PAGE_PADDING_RATIO;
+  const marginY = paper.height * PAGE_PADDING_RATIO;
+  const usableWidth = paper.width - marginX * 2;
+  const usableHeight = paper.height - marginY * 2;
+  const scale = Math.min(usableWidth / net.width, usableHeight / net.height);
+  const drawWidth = net.width * scale;
+  const drawHeight = net.height * scale;
   return {
-    width: net.width * scale,
-    height: net.height * scale,
+    width: paper.width,
+    height: paper.height,
+    marginX,
+    marginY,
+    usableWidth,
+    usableHeight,
+    drawWidth,
+    drawHeight,
+    offsetX: marginX + (usableWidth - drawWidth) / 2,
+    offsetY: marginY + (usableHeight - drawHeight) / 2,
     scale,
     scaled: scale < 1,
-    limit: PDF_MAX_MM,
+    padding: PAGE_PADDING_RATIO,
+    layout: 'a4',
   };
 }
 
@@ -109,23 +85,9 @@ export function absoluteElements(net, panels, panelKey) {
   }));
 }
 
-/**
- * 生成页计划。
- * - sheet：一页，画所有有内容的面
- * - panel：每个有内容的面一页，只画该面的元素
- */
-export function collectPages({ net, panels, mode = 'sheet' }) {
+/** 生成页计划：整张展开图一页（导出只有这一种方式） */
+export function collectPages({ net, panels }) {
   const keys = Object.keys(panels).filter((k) => panels[k] && Array.isArray(panels[k].elements));
-  const withContent = keys.filter((k) => panels[k].elements.length > 0);
-
-  if (mode === 'panel') {
-    return withContent.map((key) => ({
-      panelKey: key,
-      label: panels[key].label,
-      elements: absoluteElements(net, panels, key),
-    }));
-  }
-
   const all = [];
   for (const key of keys) all.push(...absoluteElements(net, panels, key));
   return [{ panelKey: null, label: '整张展开图', elements: all }];
@@ -146,10 +108,14 @@ export function imageDpi(element, pixelWidth) {
   return inches > 0 ? pixelWidth / inches : 0;
 }
 
-/** 文件名/元信息里的尺寸串：RSC 是 L×W×H，有高差的箱型带上前后高度 */
-export function dimsTag(dims) {
+/**
+ * 文件名/元信息里的尺寸串：矩形箱 L×W×H；有高差的箱型带上「前-后」两个高度。
+ * 注意 state.dims 里始终躺着 Hfront/Hback（默认值），所以必须按箱型判断，
+ * 否则矩形箱会被写成 600x400x300-450。
+ */
+export function dimsTag(dims, shape = 'rsc') {
   const r = (v) => Math.round(Number(v));
-  if (dims.Hfront != null) {
+  if ((shape === 'bevel' || shape === 'lshape') && dims.Hfront != null) {
     const W = dims.W ?? Number(dims.Wfront) + Number(dims.Wback);
     return `${r(dims.L)}x${r(W)}x${r(dims.Hfront)}-${r(dims.Hback)}`;
   }
@@ -157,22 +123,20 @@ export function dimsTag(dims) {
 }
 
 /**
- * 文件名：cartonmark_600x400x300_20261101.pdf
- * 多件套（天地盖）传 tag，把两件的高度都带上：
- *   cartonmark_tiandi_600x400_300-290_20261101.pdf
+ * 文件名：cartonmark_<箱型>_<尺寸>_A4_<日期>.pdf
+ *   矩形箱 cartonmark_rsc_600x400x300_A4_20261101.pdf
+ *   天地盖 cartonmark_tiandi_600x400_300-290_A4_20261101.pdf
  */
-export function exportFileName(dims, now = new Date(), tag = '') {
+export function exportFileName(dims, now = new Date(), shape = 'rsc', sizeTag = '') {
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-  const body = tag ? `${tag}` : dimsTag(dims);
-  return `cartonmark_${body}_${stamp}.pdf`;
+  const size = sizeTag || dimsTag(dims, shape);
+  return `cartonmark_${shape}_${size}_A4_${stamp}.pdf`;
 }
 
 /** 汇总导出前的信息，供弹层展示 */
-export function summarize({ net, panels, mode = 'sheet', tilePaper = 'a3' }) {
-  const tilePlan = mode === 'tile' ? planTiles(net, tilePaper) : null;
-  const page = tilePlan ? { width: tilePlan.pageWidth, height: tilePlan.pageHeight } : computePageSize(net);
-  const pages = mode === 'tile' ? [] : collectPages({ net, panels, mode });
+export function summarize({ net, panels }) {
+  const page = computeA4Page(net);
   const keys = Object.keys(panels);
   const usedPanels = keys.filter((k) => panels[k].elements.length);
   const elementCount = keys.reduce((n, k) => n + panels[k].elements.length, 0);
@@ -182,8 +146,7 @@ export function summarize({ net, panels, mode = 'sheet', tilePaper = 'a3' }) {
   );
   return {
     pageSize: page,
-    pages: tilePlan ? tilePlan.tiles.length : pages.length,
-    tilePlan,
+    pages: elementCount ? 1 : 0,
     usedPanels: usedPanels.length,
     elementCount,
     imageCount,

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * pdf-export.js —— 生成 1:1 箱唛 PDF
  *
  * 依赖（全部本地化在 vendor/）：
@@ -11,12 +11,12 @@
 
 import { normalizeRotation, rotatePoint, contentOrigin } from './elements.js';
 import {
+  computeA4Page,
   computePageSize,
   collectPages,
   collectLines,
   imageDpi,
   exportFileName,
-  planTiles,
   MIN_DPI,
   dimsTag,
 } from './pdf-plan.js';
@@ -331,31 +331,23 @@ function downloadBlob(blob, fileName) {  const url = URL.createObjectURL(blob);
 }
 
 /**
+ * 导出 PDF：整张展开图一页，页面 = 展开图 × 1.1（四周各留 5%），图形 1:1 居中。
+ * 天地盖这类两件套传 sheets，每件各出一页。
+ *
  * @param {object} opts
  * @param {object} opts.net       computeNet 结果（毫米）
  * @param {object} opts.panels    state.panels（可编辑面内容）
  * @param {{L:number,W:number,H:number}} opts.dims
- * @param {'sheet'|'panel'|'tile'} [opts.mode]
- * @param {'a3'|'a4'} [opts.tilePaper] 拼版纸张
+ * @param {{net:object,panels:object,label:string}[]} [opts.sheets] 多件套各页
  * @param {string} [opts.fileName]
  * @param {boolean} [opts.download]
  * @param {boolean} [opts.compress]
  */
-export async function exportPdf({
-  net,
-  panels,
-  dims,
-  mode = 'sheet',
-  tilePaper = 'a3',
-  fileName,
-  download = true,
-  compress = true,
-  sheets = null,
-}) {
+export async function exportPdf({ net, panels, dims, fileName, download = true, compress = true, sheets = null, layout = 'a4' }) {
   if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF 未加载');
   const { jsPDF } = window.jspdf;
 
-  // 单件箱型 = 一套页；天地盖这类两件套 = 每件一套页，按顺序拼进同一个 PDF
+  // 单件箱型 = 一页；天地盖这类两件套 = 每件一页，按顺序拼进同一个 PDF
   const jobs = (Array.isArray(sheets) && sheets.length ? sheets : [{ net, panels, label: '' }]).map((s) => ({
     net: s.net,
     panels: s.panels || {},
@@ -377,29 +369,20 @@ export async function exportPdf({
   let pageCount = 0;
   let firstPage = null;
   let firstNet = null;
-  let lastTilePlan = null;
   const pageSizes = [];
 
   for (const job of jobs) {
-    const tilePlan = mode === 'tile' ? planTiles(job.net, tilePaper) : null;
-    const page = tilePlan
-      ? { width: tilePlan.pageWidth, height: tilePlan.pageHeight, scale: 1, scaled: false }
-      : computePageSize(job.net);
+    // 默认 A4 横向等比缩放；layout: 'exact' 是保留的精确 1:1 打印路径（含 5% 留白）
+    const page = layout === 'exact' ? computePageSize(job.net) : computeA4Page(job.net);
     const orientation = page.width >= page.height ? 'landscape' : 'portrait';
-    const pages = tilePlan ? [] : collectPages({ net: job.net, panels: job.panels, mode });
+    const pages = collectPages({ net: job.net, panels: job.panels });
     const lines = collectLines(job.net);
-    const allElements = tilePlan
-      ? collectPages({ net: job.net, panels: job.panels, mode: 'sheet' })[0].elements
-      : [];
     const who = job.label ? `${job.label}：` : '';
 
     if (page.scaled) {
       warnings.push(
-        `${who}展开图 ${Math.round(job.net.width)} × ${Math.round(job.net.height)} mm 超过 PDF 单页上限 ${page.limit} mm，已等比缩到 ${(page.scale * 100).toFixed(1)}%，打印时请按同比例放大`,
+        `${who}展开图 ${Math.round(job.net.width)} × ${Math.round(job.net.height)} mm 加 5% 留白后超过 PDF 单页上限 ${page.limit} mm，已等比缩到 ${(page.scale * 100).toFixed(1)}%，打印时请按同比例放大`,
       );
-    }
-    if (tilePlan && tilePlan.tiles.length > 36) {
-      warnings.push(`${who}拼版共 ${tilePlan.tiles.length} 块，拼接会比较费工，确认尺寸是否输入过大`);
     }
 
     if (!doc) {
@@ -430,11 +413,12 @@ export async function exportPdf({
       doc.addPage([page.width, page.height], orientation);
       pageCount += 1;
     }
-    pageSizes.push({ label: job.label, width: page.width, height: page.height, pages: tilePlan ? tilePlan.tiles.length : Math.max(1, pages.length) });
+    pageSizes.push({ label: job.label, width: page.width, height: page.height, pages: 1 });
 
-    let drawScale = page.scale;
-    let drawDx = 0;
-    let drawDy = 0;
+    // 图形按 page.scale 画，落在 page.offsetX/offsetY（A4：可用区居中；exact：1:1 居中带 5% 留白）
+    const drawScale = page.scale;
+    const drawDx = page.offsetX;
+    const drawDy = page.offsetY;
 
     async function drawScene(elements) {
       strokeOutline(doc, lines.outline, lines.cuts, drawScale, drawDx, drawDy);
@@ -466,48 +450,9 @@ export async function exportPdf({
       }
     }
 
-    if (tilePlan) {
-      lastTilePlan = tilePlan;
-      for (const tile of tilePlan.tiles) {
-        if (tile.index > 1) {
-          doc.addPage([page.width, page.height], orientation);
-          pageCount += 1;
-        }
-
-        doc.saveGraphicsState();
-        doc.rect(tile.px, tile.py, tile.w, tile.h);
-        doc.clip();
-        doc.discardPath();
-
-        drawScale = 1;
-        drawDx = -tile.x + tile.px;
-        drawDy = -tile.y + tile.py;
-        await drawScene(allElements);
-
-        doc.restoreGraphicsState();
-        drawCropMarks(doc, tile);
-        drawTileLabels(doc, font, tile, tilePlan, job.label);
-      }
-    } else if (!pages.length) {
-      // 这一件没有内容也要出页（打印店按页数对位），只画轮廓
-      drawScale = page.scale;
-      drawDx = 0;
-      drawDy = 0;
-      await drawScene([]);
-      if (job.label) drawSheetNote(doc, font, job);
-    } else {
-      for (let i = 0; i < pages.length; i += 1) {
-        if (i > 0) {
-          doc.addPage([page.width, page.height], orientation);
-          pageCount += 1;
-        }
-        drawScale = page.scale;
-        drawDx = 0;
-        drawDy = 0;
-        await drawScene(pages[i].elements);
-        if (job.label) drawSheetNote(doc, font, job);
-      }
-    }
+    // 每件只有一页：这一件没内容也要出页（打印店按页数对位），只画轮廓
+    await drawScene(pages[0].elements);
+    if (job.label) drawSheetNote(doc, font, job);
   }
 
   if (lowDpi.length) {
@@ -524,55 +469,9 @@ export async function exportPdf({
     pageSize: { width: firstPage.width, height: firstPage.height },
     net: firstNet,
     scale: firstPage.scale,
-    tilePlan: lastTilePlan,
     pageSizes,
     warnings,
   };
-}
-
-/** 拼版：裁切角标（画在留白里，拼接后按角标裁切/对齐） */
-function drawCropMarks(doc, tile) {
-  const len = 4;
-  const x0 = tile.px;
-  const y0 = tile.py;
-  const x1 = tile.px + tile.w;
-  const y1 = tile.py + tile.h;
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.2);
-  doc.setLineDashPattern([], 0);
-  const segs = [
-    [x0 - len, y0, x0 - 1, y0],
-    [x0, y0 - len, x0, y0 - 1],
-    [x1 + 1, y0, x1 + len, y0],
-    [x1, y0 - len, x1, y0 - 1],
-    [x0 - len, y1, x0 - 1, y1],
-    [x0, y1 + 1, x0, y1 + len],
-    [x1 + 1, y1, x1 + len, y1],
-    [x1, y1 + 1, x1, y1 + len],
-  ];
-  for (const [ax, ay, bx, by] of segs) {
-    doc.moveTo(ax, ay);
-    doc.lineTo(bx, by);
-  }
-  doc.stroke();
-}
-
-/** 拼版：块号、「接哪边」、100% 打印提示；两件套要带上件名，否则打印店会把天盖/地盖拼错 */
-function drawTileLabels(doc, font, tile, plan, sheetLabel = '') {
-  const m = plan.margin;
-  const size = 2.6;
-  const who = sheetLabel ? `${sheetLabel} ` : '';
-  const top = `${who}第 ${tile.index}/${tile.total} 块 · 第 ${tile.row + 1} 行 第 ${tile.col + 1} 列`;
-  const edges = [
-    tile.hasLeft ? '左' : '',
-    tile.hasRight ? '右' : '',
-    tile.hasTop ? '上' : '',
-    tile.hasBottom ? '下' : '',
-  ].filter(Boolean).join('/');
-  const bottom = `接边：${edges || '无'} · 按 100% 实际大小打印 · Carton Mark`;
-
-  drawText(doc, font, { text: top, w: 400, h: size * 2, fontSize: size, align: 'left', bold: false }, tile.px, m - size * 1.9, 1);
-  drawText(doc, font, { text: bottom, w: 500, h: size * 2, fontSize: size, align: 'left', bold: false }, tile.px, tile.py + tile.h + 0.8, 1);
 }
 
 /**
