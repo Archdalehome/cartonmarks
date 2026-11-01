@@ -86,26 +86,29 @@ check('四舍五入到 2 位，不出现浮点尾巴', () => {
 
 /* ── 天地盖指标（2026-11-01 口径 v3） ───────────────── */
 
-check('天地盖：最大体积 = 实际体积 = L × W × (H天 + H地)', () => {
+check('天地盖：只按天盖外尺寸算，最大体积 = 实际体积 = L × W × H(天)', () => {
   const m = computeMetrics({ L: 600, W: 400, H: 300 }, 'tiandi');
-  // 0.6 × 0.4 × 0.59 = 0.1416 → 0.14
-  assert.equal(m.maxCbm, 0.14);
-  assert.equal(m.realCbm, 0.14, '套合后外形是长方体，两个数必须相等');
-  assert.deepEqual(m.sides, { L: 600, W: 400, H: 590 });
+  // 0.6 × 0.4 × 0.3 = 0.072 → 0.07
+  assert.equal(m.maxCbm, 0.07);
+  assert.equal(m.realCbm, 0.07, '地盖收在天盖里，两者必须相等');
+  assert.deepEqual(m.sides, { L: 600, W: 400, H: 300 });
 });
 
-check('天地盖：周长按 H天+H地 取英寸再向上取整 → 104 in', () => {
+check('天地盖：周长取 L / W / H(天) → 80 in', () => {
   const m = computeMetrics({ L: 600, W: 400, H: 300 }, 'tiandi');
-  // 23.62 / 15.75 / 23.23 → 24 / 16 / 24 → (16+24)×2+24
-  assert.equal(m.perimeterIn, 104);
+  // 23.62 / 15.75 / 11.81 → 24 / 16 / 12 → (12+16)×2+24
+  assert.equal(m.perimeterIn, 80);
 });
 
-check('天地盖：小尺寸也不出错（H=10 时地盖高取 1mm 下限）', () => {
-  const m = computeMetrics({ L: 1000, W: 1000, H: 10 }, 'tiandi');
-  assert.equal(m.maxCbm, 0.01, '地盖高取 1mm 下限，外形高 = 11mm');
-  assert.equal(m.maxCbm, m.realCbm);
+check('天地盖：改 H(天) 时两个体积和周长一起变（不掺 H(地)）', () => {
+  const a = computeMetrics({ L: 600, W: 400, H: 300 }, 'tiandi');
+  const b = computeMetrics({ L: 600, W: 400, H: 400 }, 'tiandi');
+  assert.equal(a.maxCbm, a.realCbm);
+  assert.equal(b.maxCbm, b.realCbm);
+  assert.ok(b.maxCbm > a.maxCbm);
+  assert.equal(a.perimeterIn, 80);
+  assert.equal(b.perimeterIn, 88, '600/400/400 → 24/16/16 → (16+16)×2+24');
 });
-
 check('其他箱型口径不受影响（矩形 0.07 / 80 in）', () => {
   const m = computeMetrics({ L: 600, W: 400, H: 300 }, 'rsc');
   assert.equal(m.maxCbm, 0.07);
