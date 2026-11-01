@@ -29,6 +29,7 @@ import { initAccountUI, currentAccount, isSubscribed, openLogin, openSubscribe, 
 import { exportPdf, imageReport } from './pdf-export.js';
 import { summarize, exportFileName, MIN_DPI } from './pdf-plan.js';
 import { createTemplatesUI } from './templates-ui.js';
+import { computeMetrics, fmt2 } from './metrics.js';
 
 /* 尺寸字段登记表：一个字段 = 一个输入框 + 一条错误提示；不同箱型按 dimKeysFor() 取用 */
 const DIM_FIELDS = {
@@ -66,6 +67,9 @@ const dom = {
   netHost: el('netHost'),
   isoMeta: el('isoMeta'),
   netMeta: el('netMeta'),
+  metricMax: el('metricMax'),
+  metricReal: el('metricReal'),
+  metricPerim: el('metricPerim'),
   netTitle: el('netTitle'),
   footnote: el('netFootnote'),
   netSize: el('netSize'),
@@ -576,6 +580,12 @@ function render() {
     ? `${fmtLength(geoDims.L, u)} × ${fmtLength(geoDims.W, u)} × ${fmtLength(geoDims.Hfront, u)}/${fmtLength(geoDims.Hback, u)} ${unitSuffix(u)}`
     : `${fmtLength(L, u)} × ${fmtLength(W, u)} × ${fmtLength(dims.H, u)} ${unitSuffix(u)}`;
   dom.isoMeta.textContent = isoDims;
+
+  // 轮廓图下方：体积与周长（单位固定 CBM / 英寸，不跟顶部单位切换走）
+  const metrics = computeMetrics(dims, state.shape);
+  if (dom.metricMax) dom.metricMax.textContent = fmt2(metrics.maxCbm);
+  if (dom.metricReal) dom.metricReal.textContent = fmt2(metrics.realCbm);
+  if (dom.metricPerim) dom.metricPerim.textContent = metrics.perimeterIn == null ? '—' : String(metrics.perimeterIn);
   dom.netMeta.textContent = `按容器宽度等比缩放 · 实际 ${withUnit(lastNet.width, u)} × ${withUnit(lastNet.height, u)}`;
   const lidText = lastNet.lid
     ? lastNet.lid.kind === 'split'
