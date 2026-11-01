@@ -836,3 +836,8 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 .metric-value { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .metric-unit { font-size: 11px; color: var(--muted); }
 .metric-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+/* 四位数（1000）要放得下：输入框略加宽，后缀右移 */
+.input-wrap input { width: 92px; padding: 0 22px 0 8px; }
+.derived-value { width: 92px; padding: 0 22px 0 8px; }
+/* 尺寸标注文字加白边，压在线上也看得清 */
+.dim-text { paint-order: stroke; stroke: #fff; stroke-width: 3px; stroke-linejoin: round; }

@@ -3,7 +3,7 @@
  * 输入 computeIso() 的三维投影结果，按容器宽度等比缩放后绘制。
  */
 
-import { svgEl, node, ensureDefs, line, pathEl, dimLine, contentWidth } from './svg.js';
+import { svgEl, node, ensureDefs, line, textEl, pathEl, dimLine, contentWidth } from './svg.js';
 import { computeIso } from './geometry.js';
 import { fmtLength } from './units.js';
 
@@ -26,10 +26,12 @@ export function renderIso(host, input, opts = {}) {
   const bh = Math.max(1e-6, maxY - minY);
 
   const maxH = Math.min(430, Math.max(230, Math.round((window.innerHeight || 820) * 0.38)));
-  const scale = Math.min((cw - PAD_X * 2) / bw, (maxH - PAD_Y * 2) / bh);
+  // L 形箱的 W(前)/W(后) 要引到图形左侧外面，左边多留一点边距
+  const padLeft = iso.anchors && iso.anchors.Wfront ? 100 : PAD_X;
+  const scale = Math.min((cw - padLeft - PAD_X) / bw, (maxH - PAD_Y * 2) / bh);
 
   const totalH = Math.round(bh * scale + PAD_Y * 2);
-  const ox = (cw - bw * scale) / 2 - minX * scale;
+  const ox = padLeft + ((cw - padLeft - PAD_X) - bw * scale) / 2 - minX * scale;
   const oy = PAD_Y - minY * scale;
 
   const root = svgEl(cw, totalH, { class: 'iso-svg', role: 'img' });
@@ -77,14 +79,8 @@ export function renderIso(host, input, opts = {}) {
       offset: 26,
     },
   ];
-  // 五个标注统一偏移 26；W(后) 顶在顶面内侧、H(后) 往外让，避免这两个在后上角打架
+  // 主标注统一偏移 26；H(后) 在后箱面竖棱上，往外让一点
   const DIM_OFFSET = 26;
-  if (iso.anchors.Wfront) {
-    dims3.push({ key: 'Wfront', label: `W(前) ${fmtLength(dims.Wfront, unit)}`, offset: DIM_OFFSET });
-  }
-  if (iso.anchors.Wback) {
-    dims3.push({ key: 'Wback', label: `W(后) ${fmtLength(dims.Wback, unit)}`, offset: -14 });
-  }
   if (iso.anchors.Hback) {
     dims3.push({ key: 'Hback', label: `H(后) ${fmtLength(dims.Hback, unit)}`, offset: 42 });
   }
@@ -94,6 +90,43 @@ export function renderIso(host, input, opts = {}) {
     const [a, b] = anchor.map(P);
     if (!a || !b) continue;
     dimLine(root, { a, b, label: item.label, offset: item.offset, center });
+  }
+
+  // W(前) / W(后)：平行于顶面棱，整体平移到图形左侧外面，用细虚线延长线引出去
+  const screenX = (id) => P(id).x;
+  const allX = Object.keys(iso.corners).map(screenX);
+  const minScreenX = Math.min(...allX);
+  const dimOutside = (key, label, targetX) => {
+    const anchor = iso.anchors[key];
+    if (!anchor) return;
+    const a = P(anchor[0]);
+    const b = P(anchor[1]);
+    if (!a || !b) return;
+    const dx = targetX - (a.x + b.x) / 2;
+    const a2 = { x: a.x + dx, y: a.y };
+    const b2 = { x: b.x + dx, y: b.y };
+    root.appendChild(line(a.x, a.y, a2.x, a2.y, { class: 'dim-ext' })); // 延长线（细虚线）
+    root.appendChild(line(b.x, b.y, b2.x, b2.y, { class: 'dim-ext' }));
+    root.appendChild(
+      line(a2.x, a2.y, b2.x, b2.y, {
+        class: 'dim-line',
+        'marker-start': 'url(#cm-dim-arrow)',
+        'marker-end': 'url(#cm-dim-arrow)',
+      }),
+    );
+    root.appendChild(
+      textEl((a2.x + b2.x) / 2, (a2.y + b2.y) / 2 - 7, label, {
+        class: 'dim-text',
+        'text-anchor': 'middle',
+        'dominant-baseline': 'middle',
+      }),
+    );
+  };
+  if (iso.anchors.Wback) {
+    dimOutside('Wback', `W(后) ${fmtLength(dims.Wback, unit)}`, minScreenX - 104);
+  }
+  if (iso.anchors.Wfront) {
+    dimOutside('Wfront', `W(前) ${fmtLength(dims.Wfront, unit)}`, minScreenX - 64);
   }
 
   host.replaceChildren(root);

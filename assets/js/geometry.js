@@ -161,6 +161,15 @@ function project(X, Y, Z) {
 const key = (i, j, k) => `${i}${j}${k}`;
 
 /**
+ * 唯一判定入口：一条棱相邻的两个面都背向视线，这条棱就不可见（画虚线）。
+ * 所有箱型都走这里，不允许再按「某几条棱固定虚线」硬编码。
+ */
+export function isEdgeHidden(adjacent, faceVisibility) {
+  if (!Array.isArray(adjacent) || adjacent.length === 0) return false;
+  return !adjacent.some((id) => faceVisibility[id] === true);
+}
+
+/**
  * 返回 8 个顶点、12 条棱边（含可见性）、3 个可见面。
  * 坐标是无量纲的等轴测投影，视图层再统一缩放。
  */
@@ -181,31 +190,28 @@ export function computeIso(dims) {
     }
   }
 
+  // 可见性只看面：相机在 (+X, +Y, +Z) 方向，所以 X=L、Y=W、Z=H 三个面朝观察者
+  const faceVisibility = { x0: false, xL: true, y0: false, yW: true, z0: false, zH: true };
+
   const edges = [];
   for (const id of Object.keys(corners)) {
     const [i, j, k] = [...id].map(Number);
-    if (i === 0) edges.push([id, key(1, j, k)]);
-    if (j === 0) edges.push([id, key(i, 1, k)]);
-    if (k === 0) edges.push([id, key(i, j, 1)]);
+    // 每条棱记下它相邻的两个面；可见性统一交给 isEdgeHidden 判
+    if (i === 0) edges.push([id, key(1, j, k), ['y' + (j ? 'W' : '0'), 'z' + (k ? 'H' : '0')]]);
+    if (j === 0) edges.push([id, key(i, 1, k), ['x' + (i ? 'L' : '0'), 'z' + (k ? 'H' : '0')]]);
+    if (k === 0) edges.push([id, key(i, j, 1), ['x' + (i ? 'L' : '0'), 'y' + (j ? 'W' : '0')]]);
   }
-
-  // 投影后 X、Y 都朝屏幕下方，所以离观察者最近的是 (L, W, *) 这个角：
-  // 可见面是 X = L、Y = W 两个立面，加上顶面 Z = H。
-  // 一条棱的中点若不在任何可见面上，就是被箱体遮住的背棱 → 虚线。
-  const isHidden = (idA, idB) => {
-    const a = corners3d[idA];
-    const b = corners3d[idB];
-    const mx = (a.X + b.X) / 2;
-    const my = (a.Y + b.Y) / 2;
-    const mz = (a.Z + b.Z) / 2;
-    const onVisibleFace = mx === L || my === W || mz === H;
-    return !onVisibleFace;
-  };
 
   return {
     corners,
     corners3d,
-    edges: edges.map(([a, b]) => ({ a, b, hidden: isHidden(a, b) })),
+    edges: edges.map(([a, b, adjacent]) => ({
+      a,
+      b,
+      adjacent,
+      hidden: isEdgeHidden(adjacent, faceVisibility),
+    })),
+    faceVisibility,
     faces: [
       { id: 'top', points: [key(0, 0, 1), key(1, 0, 1), key(1, 1, 1), key(0, 1, 1)], fill: '#eef2f7' },
       { id: 'front', points: [key(0, 1, 0), key(1, 1, 0), key(1, 1, 1), key(0, 1, 1)], fill: '#e6ecf4' },

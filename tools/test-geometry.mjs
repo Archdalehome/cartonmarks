@@ -394,15 +394,49 @@ check('L 形箱：只有真正被挡住的底棱/背棱走虚线', () => {
   assert.equal(iso.edges.filter((e) => e.hidden).length, 3);
 });
 
-check('斜形箱：斜顶远端棱实线，背面下沿虚线', () => {
+check('斜形箱：斜顶远端棱实线，背面底棱与背竖棱虚线', () => {
   const iso = computeIsoShape(bevelDims, 'bevel');
   assert.equal(edgeById(iso, 'a2', 'a3')?.hidden, false, '斜顶远端棱应为实线');
+  // 用户 2026-11-01：背面那条底棱（底面与后箱面相交、靠远侧水平那条）要虚线
+  assert.equal(edgeById(iso, 'a0', 'a1')?.hidden, true, '远端底面横棱应为虚线');
+  assert.equal(edgeById(iso, 'a0', 'b0')?.hidden, true, '背面底棱应为虚线');
   assert.equal(edgeById(iso, 'a3', 'a0')?.hidden, true, '远端背面竖棱应被挡住');
+  assert.equal(iso.edges.filter((e) => e.hidden).length, 3);
 });
 
 check('矩形箱仍按老规则：恰好 3 条背棱虚线', () => {
   const iso = computeIso({ L: 600, W: 400, H: 300 });
   assert.equal(iso.edges.filter((e) => e.hidden).length, 3);
+});
+
+check('通用规则：所有箱型，凡相邻两面都不可见者必虚线，否则必实线', () => {
+  const cases = [
+    ['rsc', computeIso({ L: 600, W: 400, H: 300 })],
+    ['bevel', computeIsoShape(bevelDims, 'bevel')],
+    ['lshape', computeIsoShape(lshapeDims, 'lshape')],
+  ];
+  for (const [name, iso] of cases) {
+    assert.ok(iso.faceVisibility, name + ' 必须暴露面可见性');
+    assert.ok(iso.edges.every((e) => Array.isArray(e.adjacent)), name + ' 每条棱都要记相邻面');
+    for (const e of iso.edges) {
+      const expected = !e.adjacent.some((id) => iso.faceVisibility[id] === true);
+      assert.equal(
+        e.hidden,
+        expected,
+        `${name} 的棱 ${e.a}-${e.b}（相邻 ${e.adjacent.join('+')}）可见性判定不一致`,
+      );
+    }
+  }
+});
+
+check('斜形箱：左底棱、背面底棱、左背竖棱都是虚线', () => {
+  const iso = computeIsoShape({ L: 1000, W: 1000, Hfront: 500, Hback: 1000 }, 'bevel');
+  assert.equal(edgeById(iso, 'a0', 'a1')?.hidden, true, '左底棱');
+  assert.equal(edgeById(iso, 'a0', 'b0')?.hidden, true, '背面底棱');
+  assert.equal(edgeById(iso, 'a3', 'a0')?.hidden, true, '左背竖棱');
+  for (const [a, b] of [['b0', 'b1'], ['b1', 'b2'], ['b2', 'b3'], ['b3', 'b0'], ['a1', 'b1']]) {
+    assert.equal(edgeById(iso, a, b)?.hidden, false, `${a}-${b} 应实线`);
+  }
 });
 
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);
