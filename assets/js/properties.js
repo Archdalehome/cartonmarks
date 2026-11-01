@@ -1,4 +1,4 @@
-﻿/**
+/**
  * properties.js —— 右侧属性面板
  * 纯 DOM 渲染 + 回调，不持有状态。
  */
@@ -143,6 +143,15 @@ export function renderProperties(host, ctx) {
         title: '以元素中心为轴顺时针转 90°',
         text: '↻ 顺时针 90°',
         onclick: () => callbacks.rotate(selected.id, 1),
+      }),
+    ]),
+    h('div', { class: 'prop-actions', style: 'margin-top:6px' }, [
+      h('button', {
+        type: 'button',
+        class: 'btn',
+        title: '在本面原位复制一个（Ctrl+D），复制完自动选中副本；跨面复制用下面的「复制到另一面」',
+        text: '复制一个（Ctrl+D）',
+        onclick: () => callbacks.duplicate(selected.id),
       }),
     ]),
     h('div', { class: 'prop-grid' }, [

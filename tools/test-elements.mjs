@@ -15,6 +15,7 @@ import {
   contentBox,
   contentOrigin,
   rotatePoint,
+  duplicateElement,
 } from '../assets/js/elements.js';
 
 let passed = 0;
@@ -232,5 +233,68 @@ check('旋转只改 rotation/w/h/x/y，别的字段原样保留（图片、线�
   assert.equal(line.color, color);
   assert.equal(line.orientation, orientation, '线条类型不因旋转改变');
   assert.equal(line.type, 'line');
+});
+console.log('原位复制');
+
+check('复制后数量 +1、id 不同、字段全等', () => {
+  const src = createTextElement(600, 300, { text: '原件', fontSize: 24, bold: true, align: 'center' });
+  src.rotation = 90;
+  const copy = duplicateElement(src, 600, 300);
+  assert.notEqual(copy.id, src.id);
+  for (const key of ['type', 'text', 'fontSize', 'bold', 'align', 'rotation', 'w', 'h']) {
+    assert.deepEqual(copy[key], src[key], `字段 ${key} 应一致`);
+  }
+});
+
+check('副本默认错开 10mm，且仍在面板内', () => {
+  const src = createTextElement(600, 300, { text: '原件' });
+  src.x = 100;
+  src.y = 100;
+  const copy = duplicateElement(src, 600, 300);
+  assert.equal(copy.x, 110);
+  assert.equal(copy.y, 110);
+});
+
+check('右下角的元素复制后仍被夹在面板内', () => {
+  const src = createTextElement(600, 300, { text: '右下角' });
+  src.w = 100;
+  src.h = 40;
+  src.x = 500;
+  src.y = 260;
+  const copy = duplicateElement(src, 600, 300);
+  assert.ok(copy.x >= 0 && copy.y >= 0);
+  assert.ok(copy.x + copy.w <= 600 + 1e-9, `${copy.x}+${copy.w} 超出面板宽`);
+  assert.ok(copy.y + copy.h <= 300 + 1e-9, `${copy.y}+${copy.h} 超出面板高`);
+  assert.notEqual(copy.id, src.id);
+});
+
+check('副本与原件互不影响（改一边另一边不变）', () => {
+  const src = createTextElement(600, 300, { text: '原件', fontSize: 20 });
+  const copy = duplicateElement(src, 600, 300);
+  copy.text = '副本';
+  copy.color = '#ff0000';
+  copy.x = 5;
+  assert.equal(src.text, '原件');
+  assert.notEqual(src.color, '#ff0000');
+  assert.notEqual(src.x, 5);
+  src.text = '原件改了';
+  assert.equal(copy.text, '副本');
+});
+
+check('图片副本的 src 与原图逐字节相同（共享同一个 dataURL）', () => {
+  const dataUrl = `data:image/png;base64,${'iVBORw0KGgo='.repeat(20)}`;
+  const src = { id: 'i-src', type: 'image', x: 10, y: 10, w: 80, h: 40, rotation: 0, src: dataUrl, text: '', fontSize: 0, bold: false, align: 'left' };
+  const copy = duplicateElement(src, 600, 300);
+  assert.equal(copy.src, src.src);
+  assert.equal(copy.src.length, dataUrl.length);
+});
+
+check('线条副本保留类型、颜色、粗细，换新 id', () => {
+  const src = createLineElement(600, 300, { thickness: 12, color: '#123456' });
+  const copy = duplicateElement(src, 600, 300);
+  assert.equal(copy.type, 'line');
+  assert.equal(copy.color, '#123456');
+  assert.equal(copy.orientation, src.orientation);
+  assert.notEqual(copy.id, src.id);
 });
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

@@ -184,6 +184,27 @@ export function deepCopyElement(el) {
   return { ...JSON.parse(JSON.stringify(el)), id: newId(el.type) };
 }
 
+/** 原位复制的默认错开量（毫米）：先往右下挪，放不下就换左上 */
+export const DUPLICATE_OFFSET = 10;
+
+/**
+ * 原位复制：深拷贝 + 换新 id，错开一点点避免和原件完全重叠。
+ * 右下越界就反向错开，还越界就夹回面板内。
+ */
+export function duplicateElement(el, panelW, panelH, offset = DUPLICATE_OFFSET) {
+  const copy = deepCopyElement(el);
+  const inside = (x, y) =>
+    x >= 0 && y >= 0 && x + copy.w <= panelW + 1e-9 && y + copy.h <= panelH + 1e-9;
+
+  copy.x = el.x + offset;
+  copy.y = el.y + offset;
+  if (!inside(copy.x, copy.y)) {
+    copy.x = el.x - offset;
+    copy.y = el.y - offset;
+  }
+  return clampElement(copy, panelW, panelH);
+}
+
 export function elementLabel(el) {
   if (el.type === 'text') {
     const t = (el.text || '').replace(/\s+/g, ' ').trim();

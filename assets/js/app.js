@@ -24,7 +24,7 @@ import { renderIso } from './iso-view.js';
 import { createEditor } from './editor.js';
 import { renderProperties, syncNumberFields } from './properties.js';
 import { History } from './history.js';
-import { clampElement, createTextElement, createImageElement, createLineElement, deepCopyElement, rotateElement } from './elements.js';
+import { clampElement, createTextElement, createImageElement, createLineElement, deepCopyElement, duplicateElement, rotateElement } from './elements.js';
 import { validateDim, displayValue, unitSuffix, fmt, fmtLength, withUnit } from './units.js';
 import { initAccountUI, currentAccount, isSubscribed, openLogin, openSubscribe, refreshAccount, handleApiError } from './auth-ui.js';
 import { exportPdf, imageReport } from './pdf-export.js';
@@ -877,6 +877,7 @@ function renderProps() {
       addLine: () => openElementDialog('line'),
       setLineOrientation,
       rotate: rotateElementById,
+      duplicate: duplicateElementById,
       clear: clearPanel,
     },
   });
@@ -945,6 +946,23 @@ function rotateElementById(id, dir) {
   pushHistory();
   persistSoon();
   updateSelectionInfo();
+}
+
+/** 原位复制一个同样的元素（同面内），复制完自动选中副本 */
+function duplicateElementById(id) {
+  if (!state.selected) return;
+  const list = currentElements();
+  const index = list.findIndex((e) => e.id === id);
+  if (index < 0) return;
+  const geo = lastNet.panels[state.selected];
+  const copy = duplicateElement(list[index], geo.w, geo.h);
+  list.splice(index + 1, 0, copy);
+  editor.setElements(list);
+  editor.select(copy.id); // 渲染 + 选中副本（onSelectionChange 会同步属性面板）
+  pushHistory();
+  persistSoon();
+  updateSelectionInfo();
+  showToast('已复制一个，可以直接拖走', { ms: 1600 });
 }
 
 function removeElement(id) {
@@ -1537,6 +1555,13 @@ function onKeyDown(ev) {
     if (typing) return;
     ev.preventDefault();
     redo();
+    return;
+  }
+  // Ctrl+D：原位复制选中的元素（同时拦掉浏览器的「加书签」）
+  if (mod && ev.key.toLowerCase() === 'd') {
+    if (typing || !state.selectedElement) return;
+    ev.preventDefault();
+    duplicateElementById(state.selectedElement);
     return;
   }
   if (typing || !state.selectedElement) return;
