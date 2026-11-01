@@ -39,6 +39,7 @@ export function initAccountUI({ onChange } = {}) {
   notify = typeof onChange === 'function' ? onChange : () => {};
   cacheDom();
   bind();
+  bindVisibilityRecheck();
   renderAccount();
   return refreshAccount();
 }
@@ -106,8 +107,7 @@ function bind() {
 /* ── 账号状态 ───────────────────────────────────── */
 
 export async function refreshAccount() {
-  state.loading = true;
-  try {
+  state.loading = true;  try {
     const data = await api.me();
     state.user = data.user || null;
     state.subExpiresAt = data.subExpiresAt || null;
@@ -121,7 +121,25 @@ export async function refreshAccount() {
   }
   renderAccount();
   scheduleExpiryNotify();
+  lastCheckAt = Date.now();
   return currentAccount();
+}
+
+/**
+ * 标签页放很久（比如挂一晚上）再回来时，登录态可能已经失效：
+ * 回到前台超过 5 分钟没校验过就静默重拉一次 /api/me，401 会自动落回游客。
+ */
+const RECHECK_MS = 5 * 60 * 1000;
+let lastCheckAt = 0;
+
+function bindVisibilityRecheck() {
+  if (typeof document === 'undefined') return;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!state.user) return;
+    if (Date.now() - lastCheckAt < RECHECK_MS) return;
+    refreshAccount().catch(() => {});
+  });
 }
 
 /**
@@ -477,9 +495,24 @@ function stopOrderTimer() {
 
 /* ── 统一错误处理：401 弹登录、403 弹订阅、503 提示 ── */
 
+/**
+ * 会话失效（30 天到期、服务端清档等）：本地账号态清空，界面立刻变游客。
+ * 不这样做的话顶栏会一直挂着一个点什么都 401 的登录态。
+ */
+function expireSession() {
+  clearTimeout(expiryTimer);
+  if (!state.user && !state.subExpiresAt) return;
+  state.user = null;
+  state.subExpiresAt = null;
+  renderAccount();
+  toast('登录已过期，请重新登录');
+}
+
 export function handleApiError(err) {
   if (!err) return;
   if (err.status === 401) {
+    // 会话过期：本地账号态一起清掉，顶栏立刻落回游客（不能挂着已失效的登录态），再弹登录框
+    expireSession();
     openLogin('login');
     return;
   }

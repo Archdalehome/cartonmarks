@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.argv[2] || 5173);
+let meCalls = 0; // CM_MOCK_EXPIRE=1 时用来数 /api/me 调用次数
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -29,6 +30,14 @@ const MIME = {
 const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
   let filePath = path.join(ROOT, urlPath);
+
+  // CM_MOCK_EXPIRE=1：模拟「会话到期」——/api/me 只第一次正常，之后 401；
+  // 模板接口也一律 401，用来测「点我的模板 → 401 → 顶栏落回游客态」这条路径
+  if (process.env.CM_MOCK_EXPIRE === '1' && urlPath.startsWith('/api/templates')) {
+    res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'unauthorized', message: 'mock: 会话已过期' }));
+    return;
+  }
 
   // 本地自测用假模板数据（CM_MOCK_SUB=1 时生效，不参与线上部署）
   if (process.env.CM_MOCK_SUB === '1' && urlPath.startsWith('/api/templates')) {
@@ -126,6 +135,15 @@ const server = http.createServer((req, res) => {
   }
 
   if (process.env.CM_MOCK_SUB === '1' && urlPath === '/api/me') {
+    // CM_MOCK_EXPIRE=1：第一次正常返回，之后一律 401，用来模拟「会话到期」
+    if (process.env.CM_MOCK_EXPIRE === '1') {
+      meCalls += 1;
+      if (meCalls > 1) {
+        res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'unauthorized', message: 'mock: 会话已过期' }));
+        return;
+      }
+    }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
