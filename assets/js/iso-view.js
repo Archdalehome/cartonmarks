@@ -77,14 +77,16 @@ export function renderIso(host, input, opts = {}) {
       offset: 26,
     },
   ];
+  // 五个标注统一偏移 26；W(后) 顶在顶面内侧、H(后) 往外让，避免这两个在后上角打架
+  const DIM_OFFSET = 26;
   if (iso.anchors.Wfront) {
-    dims3.push({ key: 'Wfront', label: `W(前) ${fmtLength(dims.Wfront, unit)}`, offset: 16 });
+    dims3.push({ key: 'Wfront', label: `W(前) ${fmtLength(dims.Wfront, unit)}`, offset: DIM_OFFSET });
   }
   if (iso.anchors.Wback) {
-    dims3.push({ key: 'Wback', label: `W(后) ${fmtLength(dims.Wback, unit)}`, offset: 16 });
+    dims3.push({ key: 'Wback', label: `W(后) ${fmtLength(dims.Wback, unit)}`, offset: -14 });
   }
   if (iso.anchors.Hback) {
-    dims3.push({ key: 'Hback', label: `H(后) ${fmtLength(dims.Hback, unit)}`, offset: 34 });
+    dims3.push({ key: 'Hback', label: `H(后) ${fmtLength(dims.Hback, unit)}`, offset: 42 });
   }
   for (const item of dims3) {
     const anchor = iso.anchors[item.key];

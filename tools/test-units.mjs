@@ -122,15 +122,15 @@ check('切单位后展开图总尺寸不变（斜形箱 600×397）', async () =
 
 console.log('图上标注的单位换算');
 
-check('毫米取整不带小数，厘米/英寸保留 2 位', () => {
+check('毫米取整不显示小数，厘米 1 位，英寸 2 位', () => {
   assert.equal(fmtLength(600, 'mm'), '600');
-  assert.equal(fmtLength(427.2, 'cm'), '42.72');
+  assert.equal(fmtLength(427.2, 'cm'), '42.7');
   assert.equal(fmtLength(427.2, 'in'), '16.82');
-  assert.equal(fmtLength(2000, 'cm'), '200.00');
+  assert.equal(fmtLength(2000, 'cm'), '200.0');
 });
 
 check('派生尺寸同样换算（斜长 427.2、顶盖 550）', () => {
-  assert.equal(withUnit(427.2, 'cm'), '42.72 cm');
+  assert.equal(withUnit(427.2, 'cm'), '42.7 cm');
   assert.equal(withUnit(550, 'in'), '21.65 in');
   assert.equal(withUnit(863.6, 'mm'), '864 mm');
 });
@@ -147,4 +147,21 @@ check('切到英寸再切回毫米，标注数值一字不差', () => {
   assert.deepEqual(after, before);
 });
 
+check('六个尺寸在三种单位下的显示值固定', () => {
+  const cases = [
+    [600, '600', '60.0', '23.62'],
+    [397, '397', '39.7', '15.63'],
+    [300, '300', '30.0', '11.81'],
+    [450, '450', '45.0', '17.72'],
+    [250, '250', '25.0', '9.84'],
+    [150, '150', '15.0', '5.91'],
+  ];
+  for (const [mm, a, b, c] of cases) {
+    assert.equal(fmtLength(mm, 'mm'), a, mm + ' mm');
+    assert.equal(fmtLength(mm, 'cm'), b, mm + ' cm');
+    assert.equal(fmtLength(mm, 'in'), c, mm + ' in');
+  }
+  // 用户报的 59.99：切单位不能把显示值读回状态（600 mm 在厘米下必须正好 60.0）
+  assert.equal(fmtLength(displayValue(600, 'cm') * 10, 'cm'), '60.0');
+});
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

@@ -522,10 +522,9 @@ function switchUnit(unit) {
   if (unit === state.unit) return;
   state.unit = unit;
   applyUnitChrome();
+  // 只把毫米值按新单位显示，绝不把显示值读回状态：
+  // 英寸显示是 23.62（截断），读回会变成 599.9 mm，再切厘米就成了 59.99（用户 2026-11-01 报的问题）
   writeInputsFromState();
-  const { dims } = readInputs();
-  if (dims) state.dims = dims;
-  // 图上的标注也要跟着换单位，不只是输入框
   render();
   persistSoon();
 }

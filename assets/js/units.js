@@ -20,9 +20,10 @@ export function fromMm(mm, unit) {
   return mm / (UNIT_FACTORS[unit] || 1);
 }
 
-/** 显示用数值：mm 取整，cm / 英寸保留两位小数 */
+/** 显示用数值：毫米整数、厘米 1 位、英寸 2 位（用户 2026-11-01 定） */
 export function displayValue(mm, unit) {
-  if (unit === 'cm' || unit === 'in') return Math.round(fromMm(mm, unit) * 100) / 100;
+  if (unit === 'cm') return Math.round(fromMm(mm, unit) * 10) / 10;
+  if (unit === 'in') return Math.round(fromMm(mm, unit) * 100) / 100;
   return Math.round(mm);
 }
 
@@ -73,10 +74,12 @@ export function fmt(n, digits = 0) {
  */
 export function fmtLength(mm, unit = 'mm') {
   const value = fromMm(Number(mm) || 0, unit);
-  return unit === 'cm' || unit === 'in' ? fmt(value, 2) : fmt(value, 0);
+  if (unit === 'cm') return fmt(value, 1);
+  if (unit === 'in') return fmt(value, 2);
+  return fmt(value, 0);
 }
 
-/** 带单位后缀的完整标注：600 mm / 60.00 cm / 23.62 in */
+/** 带单位后缀的完整标注：600 mm / 60.0 cm / 23.62 in */
 export function withUnit(mm, unit = 'mm') {
   return `${fmtLength(mm, unit)} ${unitSuffix(unit)}`;
 }

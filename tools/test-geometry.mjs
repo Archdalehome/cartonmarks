@@ -389,7 +389,9 @@ check('L 形箱：只有真正被挡住的底棱/背棱走虚线', () => {
   const iso = computeIsoShape(lshapeDims, 'lshape');
   assert.equal(edgeById(iso, 'a0', 'a1')?.hidden, true, '底面远棱应被挡住');
   assert.equal(edgeById(iso, 'a5', 'a0')?.hidden, true, '远端背面竖棱应被挡住');
-  assert.equal(iso.edges.filter((e) => e.hidden).length, 2);
+  // 用户 2026-11-01 指出的那条：台阶内侧靠远端的水平底棱（底/背两面都朝里）
+  assert.equal(edgeById(iso, 'a0', 'b0')?.hidden, true, '靠远端的底部水平棱应为虚线');
+  assert.equal(iso.edges.filter((e) => e.hidden).length, 3);
 });
 
 check('斜形箱：斜顶远端棱实线，背面下沿虚线', () => {

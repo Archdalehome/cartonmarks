@@ -452,12 +452,13 @@ export function computeIsoShape(dims, shapeId) {
       b: 'a' + k,
       hidden: isOccluded('a' + j, 'a' + k, ['endFar', 'side' + j]),
     });
-    // 沿长度方向的长棱：相邻的是左右两个侧面
+    // 沿长度方向的长棱：相邻的是左右两个侧面；两面都朝里就是被挡住的底棱/背棱
     const prev = sides[(j - 1 + n) % n];
+    const bothFacingAway = !(prev.visible || sides[j].visible);
     edges.push({
       a: 'a' + j,
       b: 'b' + j,
-      hidden: isOccluded('a' + j, 'b' + j, ['side' + prev.j, 'side' + j]),
+      hidden: bothFacingAway || isOccluded('a' + j, 'b' + j, ['side' + prev.j, 'side' + j]),
     });
   }
 
