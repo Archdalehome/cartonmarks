@@ -884,3 +884,17 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
     padding: 2px 6px;
   }
 }
+
+/* 天地盖：天盖 / 地盖两张图上下排，各带小标题（各自独立缩放） */
+#isoHost, #netHost { display: flex; flex-direction: column; gap: 10px; }
+#isoHost:empty, #netHost:empty { display: block; }
+.piece-slot { min-width: 0; }
+.piece-slot + .piece-slot { padding-top: 8px; border-top: 1px dashed var(--line); }
+.piece-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin: 0 0 2px 2px;
+  font-variant-numeric: tabular-nums;
+}
+.piece-slot .canvas { padding: 0; }

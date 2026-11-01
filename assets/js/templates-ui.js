@@ -44,9 +44,11 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError }) {
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
-  function render() {
+  function render(emptyText) {
     if (!items.length) {
-      dom.list.innerHTML = '<p class="tpl-empty">还没有模板。在编辑器里点「保存为模板」把当前箱唛存下来。</p>';
+      dom.list.innerHTML = `<p class="tpl-empty">${escapeHtml(
+        emptyText || '还没有模板。在编辑器里点「保存为模板」把当前箱唛存下来。',
+      )}</p>`;
       return;
     }
     dom.list.innerHTML = items
@@ -64,6 +66,17 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError }) {
         </div>`,
       )
       .join('');
+  }
+
+  /**
+   * 订阅失效 / 退出登录时调用：把缓存里的列表一起收掉并关窗，
+   * 不能出现「按钮灰了但列表还挂着上次的名字」这种半截状态。
+   */
+  function reset(reason) {
+    items = [];
+    render(reason || undefined);
+    say('');
+    close();
   }
 
   function escapeHtml(s) {
@@ -91,10 +104,15 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError }) {
   function handle(err, prefix) {
     if (onError) onError(err);
     if (err && err.code === 'not_subscribed') {
+      // 订阅失效：列表一起清掉，别让旧名字留在界面上
+      items = [];
+      render('订阅已失效，模板列表已清空。订阅后可以重新打开。');
       say('模板是订阅功能，请先订阅', true);
       return;
     }
     if (err && err.code === 'unauthorized') {
+      items = [];
+      render('登录已过期，模板列表已清空。重新登录后再打开。');
       say('请先登录后再用模板', true);
       return;
     }
@@ -219,5 +237,5 @@ export function createTemplatesUI({ onLoad, getTemplateData, toast, onError }) {
   dom.nameCancel?.addEventListener('click', closeNameDialog);
   dom.nameClose?.addEventListener('click', closeNameDialog);
 
-  return { open, refresh, openNameDialog };
+  return { open, refresh, reset, openNameDialog };
 }

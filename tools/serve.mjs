@@ -134,6 +134,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // CM_MOCK_EXPIRED_SUB=1：订阅已过期——/api/me 返回过去的时间，模板接口 403 not_subscribed
+  if (process.env.CM_MOCK_EXPIRED_SUB === '1' && urlPath.startsWith('/api/templates')) {
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ error: 'not_subscribed', message: 'mock: 订阅已过期' }));
+    return;
+  }
+
   if (process.env.CM_MOCK_SUB === '1' && urlPath === '/api/me') {
     // CM_MOCK_EXPIRE=1：第一次正常返回，之后一律 401，用来模拟「会话到期」
     if (process.env.CM_MOCK_EXPIRE === '1') {
@@ -144,11 +151,12 @@ const server = http.createServer((req, res) => {
         return;
       }
     }
+    const expired = process.env.CM_MOCK_EXPIRED_SUB === '1';
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(
       JSON.stringify({
         user: { email: 'dev@local', isAdmin: true },
-        subExpiresAt: new Date(Date.now() + 365 * 86400e3).toISOString(),
+        subExpiresAt: new Date(Date.now() + (expired ? -86400e3 : 365 * 86400e3)).toISOString(),
       }),
     );
     return;

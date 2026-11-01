@@ -1,4 +1,4 @@
-/**
+﻿/**
  * tools/test-pdf-plan.mjs —— PDF 页计划的离线断言
  * 用法：node tools/test-pdf-plan.mjs
  */
@@ -209,15 +209,15 @@ check('线条参与页计划：绝对坐标 + 不占图片计数', () => {
 /* ── 天地盖两页导出 ─────────────────────────────── */
 
 check('天地盖：两件各出 1 页，页面就是各自展开图尺寸（1200×1000 / 1160×960）', () => {
-  const lid = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'lid' });
-  const base = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'base' });
+  const lid = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi').nets.lid;
+  const base = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi').nets.base;
   assert.deepEqual(computePageSize(lid), { width: 1200, height: 1000, scale: 1, scaled: false, limit: PDF_MAX_MM });
   assert.deepEqual(computePageSize(base), { width: 1160, height: 960, scale: 1, scaled: false, limit: PDF_MAX_MM });
 });
 
 check('天地盖：拼版两块分开编号，块号各自从 1 开始', () => {
-  const lid = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'lid' });
-  const base = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi', { piece: 'base' });
+  const lid = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi').nets.lid;
+  const base = computeNet({ L: 600, W: 400, H: 300 }, 'tiandi').nets.base;
   const a = planTiles(lid, 'a4');
   const b = planTiles(base, 'a4');
   assert.ok(a.tiles.length > 1, 'A4 放不下 1200×1000，应该切块');

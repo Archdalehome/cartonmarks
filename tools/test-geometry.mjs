@@ -444,28 +444,30 @@ check('斜形箱：左底棱、背面底棱、左背竖棱都是虚线', () => {
 
 const TD = { L: 600, W: 400, H: 300 };
 
-check('天地盖：天盖展开尺寸 = (L + 2H) × (W + 2H)', () => {
-  const net = computeNet(TD, 'tiandi', { piece: 'lid' });
-  assert.equal(net.width, 600 + 2 * 300);
-  assert.equal(net.height, 400 + 2 * 300);
-  assert.equal(net.shape, 'tiandi');
-  assert.equal(net.piece, 'lid');
+check('天地盖：一次返回两张图，天盖 (L+2H)×(W+2H)、地盖用派生尺寸', () => {
+  const net = computeNet(TD, 'tiandi');
+  assert.equal(net.pieces.length, 2);
+  assert.deepEqual(net.pieces.map((p) => p.id), ['lid', 'base']);
+  assert.deepEqual(net.pieces.map((p) => p.label), ['天盖', '地盖']);
+  assert.equal(net.nets.lid.width, 600 + 2 * 300);
+  assert.equal(net.nets.lid.height, 400 + 2 * 300);
+  assert.equal(net.nets.base.width, 580 + 2 * 290);
+  assert.equal(net.nets.base.height, 380 + 2 * 290);
+  // 两张图各自的总尺寸不同，缩放要各算各的
+  assert.notEqual(net.nets.lid.width, net.nets.base.width);
 });
 
 check('天地盖：地盖派生尺寸 长宽各 −20、高 −10', () => {
-  const net = computeNet(TD, 'tiandi', { piece: 'base' });
-  assert.deepEqual(net.dims, { L: 580, W: 380, H: 290 });
-  assert.equal(net.width, 580 + 2 * 290);
-  assert.equal(net.height, 380 + 2 * 290);
-  assert.equal(net.piece, 'base');
-  // 派生值也挂在主对象上，界面直接读
+  const net = computeNet(TD, 'tiandi');
+  assert.deepEqual(net.nets.base.dims, { L: 580, W: 380, H: 290 });
   assert.deepEqual(net.derived.lid, { L: 600, W: 400, H: 300 });
   assert.deepEqual(net.derived.base, { L: 580, W: 380, H: 290 });
 });
 
 check('天地盖：两件都是 5 个区域，可编辑面合计 6 个', () => {
-  const lid = computeNet(TD, 'tiandi', { piece: 'lid' });
-  const base = computeNet(TD, 'tiandi', { piece: 'base' });
+  const net = computeNet(TD, 'tiandi');
+  const lid = net.nets.lid;
+  const base = net.nets.base;
   assert.equal(Object.keys(lid.panels).length, 5);
   assert.equal(Object.keys(base.panels).length, 5);
   const lidEditable = Object.values(lid.panels).filter((p) => p.editable);
@@ -482,13 +484,13 @@ check('天地盖：两件都是 5 个区域，可编辑面合计 6 个', () => {
 });
 
 check('天地盖：翻边深 = H，顶（底）面 = L × W，位置是十字布局', () => {
-  const net = computeNet(TD, 'tiandi', { piece: 'lid' });
+  const net = computeNet(TD, 'tiandi').nets.lid;
   const H = 300;
   const top = net.panels.lidTop;
   assert.deepEqual([top.x, top.y, top.w, top.h], [H, H, 600, 400]);
   assert.deepEqual(
-    [(p) => [p.x, p.y, p.w, p.h]].map((f) => f(net.panels.lidFront)),
-    [[300, 700, 600, 300]],
+    [net.panels.lidFront.x, net.panels.lidFront.y, net.panels.lidFront.w, net.panels.lidFront.h],
+    [300, 700, 600, 300],
   );
   assert.deepEqual([net.panels.lidBack.x, net.panels.lidBack.y, net.panels.lidBack.w, net.panels.lidBack.h], [300, 0, 600, 300]);
   assert.deepEqual([net.panels.lidLeft.x, net.panels.lidLeft.y, net.panels.lidLeft.w, net.panels.lidLeft.h], [0, 300, 300, 400]);
@@ -496,21 +498,20 @@ check('天地盖：翻边深 = H，顶（底）面 = L × W，位置是十字布
 });
 
 check('天地盖：两条折线在左/右翻边根部，外轮廓 12 个点', () => {
-  const net = computeNet(TD, 'tiandi', { piece: 'lid' });
+  const net = computeNet(TD, 'tiandi').nets.lid;
   assert.equal(net.folds.length, 4);
   assert.equal(net.outline.length, 12);
   assert.equal(net.cuts.length, 0);
 });
 
-check('天地盖：切换两件时面板 key 不冲突（6 个 key 全都在 allPanels 里）', () => {
-  const lid = computeNet(TD, 'tiandi', { piece: 'lid' });
-  const base = computeNet(TD, 'tiandi', { piece: 'base' });
-  const keys = Object.keys(lid.allPanels).filter((k) => lid.allPanels[k].editable);
+check('天地盖：两张图同屏，面板 key 带件名不撞名（6 个可编辑面）', () => {
+  const net = computeNet(TD, 'tiandi');
+  const keys = Object.keys(net.panels).filter((k) => net.panels[k].editable);
   assert.equal(keys.length, 6);
   assert.deepEqual(keys.sort(), ['baseTop', 'lidBack', 'lidFront', 'lidLeft', 'lidRight', 'lidTop']);
-  const panels = createPanels(lid);
-  assert.equal(Object.keys(panels).length, 6, '切换天/地盖时两件的面板都要留着');
-  const panelsBase = createPanels(base);
-  assert.equal(Object.keys(panelsBase).length, 6);
+  const panels = createPanels(net);
+  assert.equal(Object.keys(panels).length, 6);
+  // 两件的面板几何互不相同（各自属于自己那张图）
+  assert.notEqual(net.panels.lidTop.w, net.panels.baseTop.w);
 });
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

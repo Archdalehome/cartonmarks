@@ -574,31 +574,32 @@ function tiandiPiece(piece, d) {
 }
 
 /**
- * 天地盖：一次算出天盖与地盖两张展开图。
- * opts.piece 选当前显示哪一张（'lid' 默认 / 'base'），两张都可编辑、可导出。
+ * 天地盖：一次算出天盖与地盖两张展开图，页面把两张都画出来（不再分件切换）。
+ * pieces 按显示顺序给（天盖在上、地盖在下），每张带自己的宽度、高度和尺寸线。
  */
-export function computeTiandi(dims, shapeId, opts = {}) {
+export function computeTiandi(dims, shapeId) {
   const { lid, base } = tiandiDerived(dims);
   const nets = {
     lid: tiandiPiece('lid', lid),
     base: tiandiPiece('base', base),
   };
-  const piece = opts && opts.piece === 'base' ? 'base' : 'lid';
-  const active = nets[piece];
+  const pieces = [
+    { id: 'lid', label: '天盖', net: nets.lid },
+    { id: 'base', label: '地盖', net: nets.base },
+  ];
+  // 两件的可编辑面合在一起：面板 key 本来就带件名前缀（lidTop / baseTop），不会撞名
+  const merged = { ...nets.lid.panels, ...nets.base.panels };
 
   return {
-    ...active,
+    ...nets.lid,
     shape: shapeId || 'tiandi',
     shapeName: '天地盖（天盖 + 地盖）',
-    piece,
-    pieceList: [
-      { id: 'lid', label: '天盖' },
-      { id: 'base', label: '地盖' },
-    ],
+    pieces,
     nets,
+    // 选择、编辑器、导出都按这张合并表找面板几何（坐标各属于自己那张图）
+    panels: merged,
+    allPanels: merged,
     derived: { lid, base },
-    // 两个件的可编辑面合在一起，切换天/地盖时内容不会互相覆盖丢掉
-    allPanels: { ...nets.lid.panels, ...nets.base.panels },
   };
 }
 
