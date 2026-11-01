@@ -104,6 +104,11 @@ export function renderProperties(host, ctx) {
 
   const patch = (values, key) => callbacks.patch(selected.id, values, key);
 
+  // 图片：改宽/高时另一个按「当前框比例」联动（100% 等比，不回到原图像素比——
+  // 用户可能已经拖成了别的比例，按当前框走更符合直觉）。文字、线条仍然自由缩放。
+  const isImage = selected.type === 'image';
+  const boxRatio = selected.w > 0 && selected.h > 0 ? selected.w / selected.h : 1;
+
   const numberField = (id, label, key) =>
     h('div', { class: 'field' }, [
       h('label', { class: 'label', for: id, text: label }),
@@ -114,7 +119,31 @@ export function renderProperties(host, ctx) {
         value: String(Math.round(selected[key])),
         oninput: (ev) => {
           const v = Number(ev.target.value);
-          if (Number.isFinite(v)) patch({ [key]: v }, `prop-${key}-${selected.id}`);
+          if (!Number.isFinite(v)) return;
+          if (isImage && (key === 'w' || key === 'h') && v > 0) {
+            const linkedKey = key === 'w' ? 'h' : 'w';
+            const linkedId = key === 'w' ? 'propH' : 'propW';
+            // 先按面板尺寸等比收一下：超界时两边一起缩，不能只夹一边把比例弄坏
+            let own = v;
+            let linkedVal = key === 'w' ? own / boxRatio : own * boxRatio;
+            const maxOwn = key === 'w' ? geo.w : geo.h;
+            const maxLinked = key === 'w' ? geo.h : geo.w;
+            if (own > maxOwn) {
+              own = maxOwn;
+              linkedVal = key === 'w' ? own / boxRatio : own * boxRatio;
+            }
+            if (linkedVal > maxLinked) {
+              linkedVal = maxLinked;
+              own = key === 'w' ? linkedVal * boxRatio : linkedVal / boxRatio;
+            }
+            if (Math.abs(own - v) > 0.01) ev.target.value = String(Math.round(own));
+            patch({ [key]: own, [linkedKey]: linkedVal }, `prop-${key}-${selected.id}`);
+            // 直接写兄弟输入框的值（不派发 input 事件），所以不会互相触发、没有循环
+            const linked = host.querySelector(`#${linkedId}`);
+            if (linked) linked.value = String(Math.round(linkedVal));
+            return;
+          }
+          patch({ [key]: v }, `prop-${key}-${selected.id}`);
         },
       }),
     ]);

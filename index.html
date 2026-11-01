@@ -381,8 +381,12 @@
         <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
       </div>
       <div class="field" id="authPasswordField">
-        <label class="label" for="authPassword">密码</label>
+        <label class="label" for="authPassword" id="authPasswordLabel">密码</label>
         <input id="authPassword" type="password" autocomplete="current-password" placeholder="8–72 位">
+      </div>
+      <div class="field" id="authConfirmField" hidden>
+        <label class="label" for="authConfirm">确认新密码</label>
+        <input id="authConfirm" type="password" autocomplete="new-password" placeholder="再输入一次">
       </div>
       <div class="field" id="authCodeField" hidden>
         <label class="label" for="authCode">验证码</label>
@@ -396,9 +400,11 @@
         <input id="authName" type="text" maxlength="40">
       </div>
       <p class="element-error" id="authError" role="alert"></p>
-      <p class="hint">注册用邮箱验证码，10 分钟内有效；登录后仍只能使用矩形箱（可以打开「我的模板」载入收到的分享），订阅后解锁 L 形/斜形箱/天地盖与模板保存。</p>
+      <p class="hint" id="authHint">注册用邮箱验证码，10 分钟内有效；登录后仍只能使用矩形箱（可以打开「我的模板」载入收到的分享），订阅后解锁 L 形/斜形箱/天地盖与模板保存。</p>
+      <p class="hint" id="authResetHint" hidden>用注册邮箱收验证码重置密码，10 分钟内有效。重置成功后其它设备上的登录会全部失效。</p>
     </div>
     <div class="help-foot">
+      <button type="button" class="link-btn" id="authForgot">忘记密码？</button>
       <button type="button" class="btn" id="authCancel">取消</button>
       <button type="submit" class="btn btn-primary" id="authSubmit">登录</button>
     </div>

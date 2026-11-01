@@ -6,6 +6,6 @@
   "description": "箱唛设计工具 Carton Mark —— 纯静态站点，无构建步骤",
   "scripts": {
     "serve": "node tools/serve.mjs 5173",
-    "test": "node tools/test-geometry.mjs && node tools/test-units.mjs && node tools/test-views.mjs && node tools/test-pdf-plan.mjs && node tools/test-elements.mjs && node tools/test-functions.mjs && node tools/test-templates-ui.mjs && node tools/test-admin.mjs && node tools/test-storage.mjs && node tools/test-metrics.mjs && node tools/test-shape-switch.mjs"
+    "test": "node tools/test-geometry.mjs && node tools/test-units.mjs && node tools/test-views.mjs && node tools/test-pdf-plan.mjs && node tools/test-elements.mjs && node tools/test-functions.mjs && node tools/test-templates-ui.mjs && node tools/test-image-ratio.mjs && node tools/test-admin.mjs && node tools/test-storage.mjs && node tools/test-metrics.mjs && node tools/test-shape-switch.mjs"
   }
 }

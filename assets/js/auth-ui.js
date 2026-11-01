@@ -53,11 +53,17 @@ function cacheDom() {
   dom.authTabs = document.getElementById('authTabs');
   dom.authEmail = document.getElementById('authEmail');
   dom.authPassword = document.getElementById('authPassword');
+  dom.authPasswordLabel = document.getElementById('authPasswordLabel');
   dom.authPasswordField = document.getElementById('authPasswordField');
+  dom.authConfirm = document.getElementById('authConfirm');
+  dom.authConfirmField = document.getElementById('authConfirmField');
   dom.authCode = document.getElementById('authCode');
   dom.authCodeField = document.getElementById('authCodeField');
   dom.authName = document.getElementById('authName');
   dom.authNameField = document.getElementById('authNameField');
+  dom.authHint = document.getElementById('authHint');
+  dom.authResetHint = document.getElementById('authResetHint');
+  dom.authForgot = document.getElementById('authForgot');
   dom.sendCodeBtn = document.getElementById('sendCodeBtn');
   dom.authError = document.getElementById('authError');
   dom.authSubmit = document.getElementById('authSubmit');
@@ -89,6 +95,14 @@ function bind() {
     if (tab) setAuthTab(tab.dataset.authTab);
   });
 
+  // 忘记密码：在同一个弹层里切到重置模式（不另开一层，少一个弹层少一处层级问题）
+  dom.authForgot.addEventListener('click', () => {
+    setAuthTab('reset');
+    const email = state.user ? state.user.email : dom.authEmail.value.trim();
+    if (email) dom.authEmail.value = email;
+    dom.authPassword.focus();
+  });
+
   dom.sendCodeBtn.addEventListener('click', sendCode);
   dom.authForm.addEventListener('submit', submitAuth);
   dom.authCancel.addEventListener('click', () => dom.authDialog.close());
@@ -106,16 +120,27 @@ function bind() {
 
 /* ── 账号状态 ───────────────────────────────────── */
 
+let staleNotified = false;
+
 export async function refreshAccount() {
-  state.loading = true;  try {
+  state.loading = true;
+  try {
     const data = await api.me();
     state.user = data.user || null;
     state.subExpiresAt = data.subExpiresAt || null;
     state.backendDown = false;
+    staleNotified = false;
   } catch (err) {
+    // session_stale：会话还在但用户记录没了（多为后台清数据误伤），明确提示重新登录，
+    // 不要静默变成游客——那样症状和「没登录」一模一样，很难查。
+    const stale = Boolean(err && (err.code === 'session_stale' || err.status === 401));
     state.user = null;
     state.subExpiresAt = null;
     state.backendDown = isBackendDown(err);
+    if (stale && !staleNotified) {
+      staleNotified = true;
+      toast('登录状态已失效，请重新登录');
+    }
   } finally {
     state.loading = false;
   }
@@ -124,6 +149,7 @@ export async function refreshAccount() {
   lastCheckAt = Date.now();
   return currentAccount();
 }
+
 
 /**
  * 标签页放很久（比如挂一晚上）再回来时，登录态可能已经失效：
@@ -226,6 +252,7 @@ export function openLogin(tab = 'login') {
   dom.authError.textContent = '';
   dom.authEmail.value = state.user ? state.user.email : '';
   dom.authPassword.value = '';
+  dom.authConfirm.value = '';
   dom.authCode.value = '';
   dom.authName.value = '';
   dom.authSubmit.disabled = false;
@@ -235,14 +262,24 @@ export function openLogin(tab = 'login') {
   dom.authEmail.focus();
 }
 
+/** mode: 'login' | 'register' | 'reset'（重置密码复用同一个弹层） */
 function setAuthTab(tab) {
-  const isRegister = tab === 'register';
-  dom.authDialog.dataset.tab = isRegister ? 'register' : 'login';
-  dom.authTitle.textContent = isRegister ? '注册（邮箱验证码）' : '登录';
-  dom.authSubmit.textContent = isRegister ? '注册并登录' : '登录';
+  const mode = tab === 'register' ? 'register' : tab === 'reset' ? 'reset' : 'login';
+  const isRegister = mode === 'register';
+  const isReset = mode === 'reset';
+  dom.authDialog.dataset.tab = mode;
+  dom.authTabs.hidden = isReset;
+  dom.authTitle.textContent = isRegister ? '注册（邮箱验证码）' : isReset ? '重置密码' : '登录';
+  dom.authSubmit.textContent = isRegister ? '注册并登录' : isReset ? '重置并登录' : '登录';
   dom.authPasswordField.hidden = isRegister;
-  dom.authCodeField.hidden = !isRegister;
+  dom.authPasswordLabel.textContent = isReset ? '新密码' : '密码';
+  dom.authPassword.setAttribute('autocomplete', isReset ? 'new-password' : 'current-password');
+  dom.authConfirmField.hidden = !isReset;
+  dom.authCodeField.hidden = mode === 'login';
   dom.authNameField.hidden = !isRegister;
+  dom.authHint.hidden = isReset;
+  dom.authResetHint.hidden = !isReset;
+  dom.authForgot.hidden = mode !== 'login';
   dom.authError.textContent = '';
   dom.authTabs.querySelectorAll('button').forEach((b) => {
     const on = b.dataset.authTab === (isRegister ? 'register' : 'login');
@@ -288,9 +325,12 @@ async function sendCode() {
   dom.sendCodeBtn.disabled = true;
   dom.sendCodeBtn.textContent = '发送中…';
   dom.authError.textContent = '';
+  const mode = dom.authDialog.dataset.tab;
   try {
-    const res = await api.sendCode(email);
+    // 重置模式走 reset-code：邮箱没注册也返回成功（防枚举），所以提示语统一
+    const res = mode === 'reset' ? await api.resetCode(email) : await api.sendCode(email);
     startCountdown(res && res.retryAfter ? res.retryAfter : 60);
+    if (mode === 'reset') toast('如果这个邮箱注册过，验证码已发出');
   } catch (err) {
     dom.sendCodeBtn.disabled = false;
     dom.sendCodeBtn.textContent = '发送验证码';
@@ -318,7 +358,13 @@ function startCountdown(seconds) {
 
 async function submitAuth(ev) {
   ev.preventDefault();
-  const isRegister = dom.authDialog.dataset.tab === 'register';
+  const mode = dom.authDialog.dataset.tab === 'register'
+    ? 'register'
+    : dom.authDialog.dataset.tab === 'reset'
+      ? 'reset'
+      : 'login';
+  const isRegister = mode === 'register';
+  const isReset = mode === 'reset';
   const email = dom.authEmail.value.trim().toLowerCase();
   const password = dom.authPassword.value;
   const code = dom.authCode.value.trim();
@@ -326,6 +372,14 @@ async function submitAuth(ev) {
 
   if (!email) {
     dom.authError.textContent = '请填邮箱';
+    return;
+  }
+  if (isReset && !/^\d{6}$/.test(code)) {
+    dom.authError.textContent = '验证码是 6 位数字';
+    return;
+  }
+  if (isReset && password !== dom.authConfirm.value) {
+    dom.authError.textContent = '两次输入的密码不一致';
     return;
   }
 
@@ -342,6 +396,17 @@ async function submitAuth(ev) {
       }
       await api.register({ email, code, password, name: dom.authName.value.trim() });
       toast('注册成功，已登录');
+    } else if (isReset) {
+      if (password.length < 8) {
+        dom.authError.textContent = '密码至少 8 位';
+        return;
+      }
+      if (password.length > 72) {
+        dom.authError.textContent = '密码最多 72 位';
+        return;
+      }
+      await api.resetPassword({ email, code, password });
+      toast('密码已重置，已登录');
     } else {
       if (!password) {
         dom.authError.textContent = '请填密码';

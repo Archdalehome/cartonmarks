@@ -568,6 +568,21 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   gap: 8px;
   padding: 10px 18px 14px;
 }
+/* 登录弹层左下角的文字按钮（忘记密码？） */
+.link-btn {
+  margin-right: auto;
+  align-self: center;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--accent, #1f6feb);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-btn[hidden] { display: none; }
 
 /* 导出 PDF 弹层 */
 .export-summary {

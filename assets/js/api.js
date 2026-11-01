@@ -48,6 +48,8 @@ export const api = {
   sendCode: (email) => request('/api/auth/code', { method: 'POST', body: { email } }),
   register: (payload) => request('/api/auth/register', { method: 'POST', body: payload }),
   login: (payload) => request('/api/auth/login', { method: 'POST', body: payload }),
+  resetCode: (email) => request('/api/auth/reset-code', { method: 'POST', body: { email } }),
+  resetPassword: (payload) => request('/api/auth/reset', { method: 'POST', body: payload }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   payCreate: () => request('/api/pay/create', { method: 'POST', body: {} }),
   payStatus: (orderId) => request(`/api/pay/status?orderId=${encodeURIComponent(orderId)}`),

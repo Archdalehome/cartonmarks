@@ -20,9 +20,7 @@ import {
   getUserByEmail,
   publicUser,
 } from '../../../lib/api/auth.js';
-
-const CODE_TTL = 600;
-const MAX_TRIES = 5;
+import { verifyCode } from '../../../lib/api/codes.js';
 
 export const onRequestPost = guard(async ({ request, env }) => {
   const kv = getKV(env);
@@ -45,34 +43,8 @@ export const onRequestPost = guard(async ({ request, env }) => {
     return fail('email_taken', '这个邮箱已经注册过了，直接登录吧', 409);
   }
 
-  const record = await kv.get(`cm:code:${email}`, 'json');
-  if (!record) return fail('code_expired', '验证码已过期，请重新获取', 410);
-
-  const createdAt = new Date(record.createdAt || 0).getTime();
-  if (!Number.isFinite(createdAt) || Date.now() - createdAt > CODE_TTL * 1000) {
-    await kv.delete(`cm:code:${email}`);
-    return fail('code_expired', '验证码已过期，请重新获取', 410);
-  }
-
-  const tries = Number(record.tries || 0);
-  if (tries >= MAX_TRIES) {
-    await kv.delete(`cm:code:${email}`);
-    return fail('code_invalid', '验证码尝试次数过多，请重新获取', 400, { attemptsLeft: 0 });
-  }
-
-  if (code !== record.code) {
-    const nextTries = tries + 1;
-    if (nextTries >= MAX_TRIES) {
-      await kv.delete(`cm:code:${email}`);
-    } else {
-      await kv.put(
-        `cm:code:${email}`,
-        JSON.stringify({ ...record, tries: nextTries }),
-        { expirationTtl: CODE_TTL },
-      );
-    }
-    return fail('code_invalid', '验证码不对', 400, { attemptsLeft: Math.max(0, MAX_TRIES - nextTries) });
-  }
+  const checked = await verifyCode({ kv, email, code });
+  if (checked.error) return checked.error;
 
   // 建号
   const uid = randomId('u_');

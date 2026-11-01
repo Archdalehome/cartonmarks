@@ -88,6 +88,30 @@
 
 响应 204，删除 KV 里的会话键并 `Set-Cookie: cm_sess=; Max-Age=0`。
 
+## 4.1 POST /api/auth/reset-code（找回密码发码）
+
+请求：`{ "email": "..." }`
+
+响应 200：`{ "ok": true, "retryAfter": 60 }`
+
+规则：
+- **无论邮箱是否注册都返回同样的 200**（防枚举）：只有已注册用户才真发邮件、才写 `cm:code:{email}`；
+  未注册时同样消耗 60 秒冷却和每日额度，保证两种邮箱对外只能看到 200 / 429 的区别。
+- 冷却、每日上限、IP 上限与 `/api/auth/code` 完全共用（`lib/api/codes.js`），验证码 6 位 / TTL 600 秒 / 最多试 5 次。
+
+## 4.2 POST /api/auth/reset（重置密码）
+
+请求：`{ "email": "...", "code": "123456", "password": "8–72 位" }`
+
+响应 200：`{ "user": { "id", "email", "createdAt" } }` + `Set-Cookie: cm_sess=...`（重置成功即登录）
+
+规则：
+- 验证码错误 `code_invalid`（附 `attemptsLeft`）、过期 `code_expired`；邮箱没注册也返回 `code_expired`，不暴露是否存在。
+- 密码 8–72 位，重新生成 salt 与 hash。
+- **重置成功必须作废该用户的所有旧会话**：写 `cm:pwAt:{uid}` = 当前时间，
+  `readSession` 读到会话 `createdAt <= pwAt` 就删掉会话并按未登录处理；
+  新会话用 `now + 1ms` 创建，所以不会被这条规则误杀。不依赖 KV list，强一致。
+
 ## 5. GET /api/me
 
 响应 200：
@@ -97,6 +121,11 @@
 ```
 
 未登录：`{ "user": null, "subExpiresAt": null }`（**不要** 401，前端靠它渲染登录/订阅状态）。
+
+会话还在但用户查不到（`cm:uid2email` 或 `cm:user` 缺失，通常是清数据误伤）：**401 `session_stale`**，
+同时删掉这个死会话。前端据此清本地账号态并提示「登录状态已失效，请重新登录」——
+不要静默返回 `user: null`，那样症状和「没登录」一模一样，很难排查。
+
 `subExpiresAt` 只认服务端 KV 值，前端不得自行推断。
 
 ## 6. POST /api/pay/create

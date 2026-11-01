@@ -103,6 +103,8 @@ const codeEp = await import('../functions/api/auth/code.js');
 const registerEp = await import('../functions/api/auth/register.js');
 const loginEp = await import('../functions/api/auth/login.js');
 const logoutEp = await import('../functions/api/auth/logout.js');
+const resetCodeEp = await import('../functions/api/auth/reset-code.js');
+const resetEp = await import('../functions/api/auth/reset.js');
 const meEp = await import('../functions/api/me.js');
 const payCreateEp = await import('../functions/api/pay/create.js');
 const payStatusEp = await import('../functions/api/pay/status.js');
@@ -447,6 +449,25 @@ await check('登录后 /api/me 返回用户，会话过期后变 null', async ()
   assert.equal((await jsonBody(res2)).user, null);
 });
 
+await check('会话还在但用户记录没了 → 401 session_stale（不是 200+null）', async () => {
+  const env = makeEnv();
+  const token = await registerUser(env);
+  const user = await env.CM_KV.get('cm:user:a@b.com', 'json');
+  // 模拟后台清数据误伤：只删 uid→email 映射
+  await env.CM_KV.delete(`cm:uid2email:${user.id}`);
+
+  const res = await meEp.onRequestGet({ request: getRequest('https://x/api/me', token), env });
+  assert.equal(res.status, 401);
+  const body = await jsonBody(res);
+  assert.equal(body.error, 'session_stale');
+  assert.ok(body.message.includes('重新登录'));
+
+  // 死会话顺手删掉：再问一次就是正常游客态，不会一直 401
+  const again = await meEp.onRequestGet({ request: getRequest('https://x/api/me', token), env });
+  assert.equal(again.status, 200);
+  assert.equal((await jsonBody(again)).user, null);
+});
+
 await check('登出后会话失效', async () => {
   const env = makeEnv();
   const token = await registerUser(env);
@@ -458,6 +479,189 @@ await check('登出后会话失效', async () => {
   assert.ok((out.headers.get('set-cookie') || '').includes('Max-Age=0'));
   const me = await meEp.onRequestGet({ request: getRequest('https://x/api/me', token), env });
   assert.equal((await jsonBody(me)).user, null);
+});
+
+/* ── 找回密码 ───────────────────────────────────── */
+
+console.log('找回密码');
+
+const RESET_OK_HTML = async () => new Response('{"id":"re_ok"}', { status: 200 });
+
+async function withMailCapture(fn) {
+  const sent = [];
+  fetchHandler = async (url, opts) => {
+    if (String(url).includes('api.resend.com')) {
+      sent.push({ body: JSON.parse(opts.body || '{}'), headers: opts.headers });
+      return new Response('{"id":"re_ok"}', { status: 200 });
+    }
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    await fn();
+  } finally {
+    fetchHandler = RESET_OK_HTML;
+  }
+  return sent;
+}
+
+await check('找回密码发码：已注册邮箱 → 200 且真发信', async () => {
+  const env = makeEnv();
+  await registerUser(env, 'r@b.com');
+  const sent = await withMailCapture(async () => {
+    const res = await resetCodeEp.onRequestPost({
+      request: jsonRequest('POST', 'https://x/api/auth/reset-code', { email: 'r@b.com' }),
+      env,
+    });
+    assert.equal(res.status, 200);
+    const body = await jsonBody(res);
+    assert.equal(body.ok, true);
+    assert.equal(body.retryAfter, 60);
+  });
+  assert.equal(sent.length, 1, '已注册邮箱要真发一封');
+  assert.equal(sent[0].body.subject, 'Carton Mark 重置密码验证码');
+  assert.deepEqual(sent[0].body.to, ['r@b.com']);
+
+  const stored = await env.CM_KV.get('cm:code:r@b.com', 'json');
+  assert.ok(stored && /^\d{6}$/.test(stored.code));
+});
+
+await check('找回密码发码：未注册邮箱也 200，但不发信也不落码（防枚举）', async () => {
+  const env = makeEnv();
+  const sent = await withMailCapture(async () => {
+    const res = await resetCodeEp.onRequestPost({
+      request: jsonRequest('POST', 'https://x/api/auth/reset-code', { email: 'nobody@b.com' }),
+      env,
+    });
+    assert.equal(res.status, 200);
+    const body = await jsonBody(res);
+    assert.equal(body.ok, true);
+  });
+  assert.equal(sent.length, 0, '不存在的邮箱不该收到信（也不该暴露 404）');
+  assert.equal(await env.CM_KV.get('cm:code:nobody@b.com'), null, '不该给不存在的邮箱落码');
+});
+
+await check('找回密码发码：60 秒冷却对已注册/未注册一视同仁（不给枚举信号）', async () => {
+  const env = makeEnv();
+  await registerUser(env, 'r2@b.com');
+  fetchHandler = RESET_OK_HTML;
+  const first = await resetCodeEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset-code', { email: 'r2@b.com' }),
+    env,
+  });
+  assert.equal(first.status, 200);
+
+  const known = await resetCodeEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset-code', { email: 'r2@b.com' }),
+    env,
+  });
+  // 未注册邮箱：第一次 200（静默），紧接着再要一次也必须是 429——冷却对两种邮箱一致
+  const ghostFirst = await resetCodeEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset-code', { email: 'ghost@b.com' }),
+    env,
+  });
+  const ghostSecond = await resetCodeEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset-code', { email: 'ghost@b.com' }),
+    env,
+  });
+  assert.equal(ghostFirst.status, 200);
+  assert.equal(known.status, 429);
+  assert.equal(ghostSecond.status, 429);
+  assert.equal((await jsonBody(known)).error, (await jsonBody(ghostSecond)).error);});
+
+await check('重置密码：验证码不对 → code_invalid，密码不变', async () => {
+  const env = makeEnv();
+  await registerUser(env, 'r3@b.com', 'oldpassword');
+  await seedCode(env, 'r3@b.com', '111111');
+  const res = await resetEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset', {
+      email: 'r3@b.com', code: '999999', password: 'newpassword',
+    }),
+    env,
+  });
+  assert.equal(res.status, 400);
+  const body = await jsonBody(res);
+  assert.equal(body.error, 'code_invalid');
+  assert.ok(body.attemptsLeft >= 0);
+
+  const old = await loginEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/login', { email: 'r3@b.com', password: 'oldpassword' }),
+    env,
+  });
+  assert.equal(old.status, 200, '验证码错的时候密码不能变');
+});
+
+await check('重置密码：成功 → 200 + Cookie，旧密码失效、新密码可登录', async () => {
+  const env = makeEnv();
+  await registerUser(env, 'r4@b.com', 'oldpassword');
+  await seedCode(env, 'r4@b.com', '222222');
+  const res = await resetEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset', {
+      email: 'r4@b.com', code: '222222', password: 'newpassword1',
+    }),
+    env,
+  });
+  assert.equal(res.status, 200);
+  assert.ok(cookieToken(res), '重置成功直接登录');
+  assert.equal(await env.CM_KV.get('cm:code:r4@b.com'), null, '验证码用过就删，不能重放');
+
+  const old = await loginEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/login', { email: 'r4@b.com', password: 'oldpassword' }),
+    env,
+  });
+  assert.equal(old.status, 401);
+
+  const next = await loginEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/login', { email: 'r4@b.com', password: 'newpassword1' }),
+    env,
+  });
+  assert.equal(next.status, 200);
+});
+
+await check('重置密码：旧会话全部作废，只有新会话有效', async () => {
+  const env = makeEnv();
+  const oldToken = await registerUser(env, 'r5@b.com', 'oldpassword');
+  await seedCode(env, 'r5@b.com', '333333');
+  const res = await resetEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset', {
+      email: 'r5@b.com', code: '333333', password: 'newpassword2',
+    }),
+    env,
+  });
+  const newToken = cookieToken(res);
+
+  const meOld = await meEp.onRequestGet({ request: getRequest('https://x/api/me', oldToken), env });
+  assert.equal((await jsonBody(meOld)).user, null, '改密码前的会话必须失效');
+
+  const meNew = await meEp.onRequestGet({ request: getRequest('https://x/api/me', newToken), env });
+  assert.equal(meNew.status, 200);
+  assert.equal((await jsonBody(meNew)).user.email, 'r5@b.com');
+});
+
+await check('重置密码：未注册邮箱 → code_expired（不暴露邮箱是否存在）', async () => {
+  const env = makeEnv();
+  await seedCode(env, 'ghost2@b.com', '444444');
+  const res = await resetEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset', {
+      email: 'ghost2@b.com', code: '444444', password: 'newpassword3',
+    }),
+    env,
+  });
+  assert.equal(res.status, 410);
+  assert.equal((await jsonBody(res)).error, 'code_expired');
+});
+
+await check('重置密码：密码太短 → 400', async () => {
+  const env = makeEnv();
+  await registerUser(env, 'r6@b.com');
+  await seedCode(env, 'r6@b.com', '555555');
+  const res = await resetEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/auth/reset', {
+      email: 'r6@b.com', code: '555555', password: 'short',
+    }),
+    env,
+  });
+  assert.equal(res.status, 400);
+  assert.equal((await jsonBody(res)).error, 'invalid_request');
 });
 
 /* ── 下单 / 查单 / 回调 ─────────────────────────── */

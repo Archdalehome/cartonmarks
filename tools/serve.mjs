@@ -47,6 +47,24 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 本地自测用假「找回密码」：发码永远 200（线上就是防枚举的），重置成功即登录
+  if (process.env.CM_MOCK_SUB === '1' && urlPath.startsWith('/api/auth/reset')) {
+    const send = (status, body) => {
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(body));
+    };
+    if (urlPath === '/api/auth/reset-code') {
+      send(200, { ok: true, retryAfter: 60 });
+      return;
+    }
+    if (urlPath === '/api/auth/reset') {
+      send(200, { user: { email: 'dev@local', createdAt: '2026-10-01T00:00:00.000Z' } });
+      return;
+    }
+    send(404, { error: 'not_found', message: 'mock: 未实现的接口' });
+    return;
+  }
+
   // 本地自测用假模板数据（CM_MOCK_SUB=1 时生效，不参与线上部署）
   if (process.env.CM_MOCK_SUB === '1' && urlPath.startsWith('/api/templates')) {
     const send = (status, body) => {
@@ -103,7 +121,24 @@ const server = http.createServer((req, res) => {
           shape: 'lshape',
           unit: 'mm',
           dims: { L: 600, Hfront: 300, Hback: 450, Wfront: 250, Wback: 150 },
-          panels: { front: { elements: [] }, topLid: { elements: [] } },
+          panels: {
+            front: {
+              elements: [
+                {
+                  // 自测用固定图片（1×1 红点）：用来验属性面板里改宽/高是否等比联动
+                  id: 'e_img_mock',
+                  type: 'image',
+                  x: 40,
+                  y: 40,
+                  w: 200,
+                  h: 100,
+                  rotation: 0,
+                  src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+                },
+              ],
+            },
+            topLid: { elements: [] },
+          },
         },
       });
       return;
@@ -211,6 +246,18 @@ const server = http.createServer((req, res) => {
   }
 
   if (process.env.CM_MOCK_SUB === '1' && urlPath === '/api/me') {
+    // CM_MOCK_GUEST=1：游客态（但仍保留模板/找回密码的假接口，方便测未登录路径）
+    if (process.env.CM_MOCK_GUEST === '1') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ user: null, subExpiresAt: null }));
+      return;
+    }
+    // CM_MOCK_STALE=1：会话还在但用户记录没了（线上是 401 session_stale）
+    if (process.env.CM_MOCK_STALE === '1') {
+      res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ error: 'session_stale', message: '登录状态已失效，请重新登录' }));
+      return;
+    }
     // CM_MOCK_EXPIRE=1：第一次正常返回，之后一律 401，用来模拟「会话到期」
     if (process.env.CM_MOCK_EXPIRE === '1') {
       meCalls += 1;
