@@ -1515,8 +1515,20 @@ function bindEvents() {
 
   document.addEventListener('keydown', onKeyDown);
   // 点编辑器卡片以外的任何地方 → 取消元素选中（弹层里点不算，避免打断新建/保存流程）
+  // 从卡片里开始的交互（拖动/缩放）即使松手在卡片外，也不算「点外面」
+  let pointerDownInCard = false;
+  document.addEventListener(
+    'pointerdown',
+    (ev) => {
+      pointerDownInCard = Boolean(dom.editorCard && dom.editorCard.contains(ev.target));
+    },
+    true,
+  );
   document.addEventListener('click', (ev) => {
+    const startedInside = pointerDownInCard;
+    pointerDownInCard = false;
     if (!state.selectedElement) return;
+    if (startedInside) return;
     const t = ev.target;
     if (dom.editorCard && dom.editorCard.contains(t)) return;
     if (t && t.closest && t.closest('dialog')) return;
