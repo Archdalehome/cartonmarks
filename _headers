@@ -1,6 +1,18 @@
 # Carton Mark response headers (Cloudflare Pages)
 # HTML 每次回源校验，避免升级后仍看到旧界面；静态资源给 5 分钟缓存（文件名没带版本号，不能长缓存）
-/*
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/404.html
+  Cache-Control: no-cache
+
+/admin
+  Cache-Control: no-cache
+
+/admin/*
   Cache-Control: no-cache
 
 /assets/*
