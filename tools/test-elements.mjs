@@ -211,4 +211,26 @@ check('rotatePoint：绕中心顺时针 90°，(右,中) 转到 (中,下)', () =
   const p = rotatePoint(100, 50, 50, 50, 90);
   assert.ok(Math.abs(p.x - 50) < 1e-9 && Math.abs(p.y - 100) < 1e-9);
 });
+check('旋转不改图片原编码：转四次 src 一个字节都不变（不会反复压缩）', () => {
+  const src = `data:image/jpeg;base64,${'A'.repeat(4096)}`;
+  const el = { id: 'i1', type: 'image', x: 10, y: 10, w: 80, h: 40, rotation: 0, src, text: '', fontSize: 0, bold: false, align: 'left' };
+  const before = el.src;
+  for (let i = 0; i < 4; i += 1) rotateElement(el, 1, 600, 300);
+  assert.equal(el.src, before, 'src 不能被旋转改写');
+  assert.equal(el.src.length, before.length);
+  assert.equal(normalizeRotation(el.rotation), 0);
+});
+
+check('旋转只改 rotation/w/h/x/y，别的字段原样保留（图片、线条都适用）', () => {
+  const img = { id: 'i2', type: 'image', x: 10, y: 10, w: 80, h: 40, rotation: 0, src: 'data:image/png;base64,ZZZ', text: '', fontSize: 0, bold: false, align: 'left' };
+  rotateElement(img, 1, 600, 300);
+  assert.equal(img.src, 'data:image/png;base64,ZZZ');
+  const line = createLineElement(600, 300);
+  const color = line.color;
+  const orientation = line.orientation;
+  rotateElement(line, 1, 600, 300);
+  assert.equal(line.color, color);
+  assert.equal(line.orientation, orientation, '线条类型不因旋转改变');
+  assert.equal(line.type, 'line');
+});
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);
