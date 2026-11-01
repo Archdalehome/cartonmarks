@@ -134,21 +134,28 @@ export function dimLine(root, { a, b, label, offset = 24, center = null, classNa
   if (rot) text.setAttribute('transform', `rotate(${rot} ${tx} ${ty})`);
   root.appendChild(text);
   recordLabel(root, label, tx, ty, rot);
+
+  // 尺寸线两端（偏移后的位置），供「尺寸线平行于被标棱」的断言使用
+  return { a: oa, b: ob };
 }
 
 /**
  * 记下每条标注文字的位置与估算尺寸，供「标注文字包围盒不许相交」的断言使用。
- * 宽度按字符数粗估（中文/数字混排够用），竖排时宽高互换。
+ * 宽度按字符数粗估（中文/数字混排够用），再按旋转角取轴对齐包围盒。
+ * @param {number} rotate 文字旋转角（度）
  */
 export function recordLabel(root, text, x, y, rotate = 0) {
   const w = String(text).length * 6.2 + 4;
   const h = 12;
+  const rad = ((Math.abs(rotate) % 180) * Math.PI) / 180;
+  const c = Math.abs(Math.cos(rad));
+  const s = Math.abs(Math.sin(rad));
   root.__dimLabels = root.__dimLabels || [];
   root.__dimLabels.push({
     text: String(text),
     x,
     y,
-    width: rotate ? h : w,
-    height: rotate ? w : h,
+    width: w * c + h * s,
+    height: w * s + h * c,
   });
 }

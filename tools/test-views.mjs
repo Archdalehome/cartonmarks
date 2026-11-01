@@ -10,7 +10,9 @@ installDom();
 
 const { computeNet, registerShapeGeometry } = await import('../assets/js/geometry.js');
 const { renderNet } = await import('../assets/js/net-view.js');
-const { renderIso, hullLeftX } = await import('../assets/js/iso-view.js');
+const { renderIso, hullLeftX, angleBetween, axisDeviation, pointInPoly, firstFaceHit } = await import(
+  '../assets/js/iso-view.js'
+);
 
 let passed = 0;
 function check(name, fn) {
@@ -247,21 +249,81 @@ check('L 形箱六个标注齐全（L / W / H(前) / H(后) / W(前) / W(后)）
   }
 });
 
-check('外引虚线只往左走，且不穿箱体（三种箱型）', () => {
+check('尺寸线平行于被标的那条棱（夹角 < 1°）', () => {
+  for (const [name, d] of labelCases) {
+    const iso = name === 'rsc' ? d : computeIsoShape(d, name);
+    const root = renderIso(makeHost(420), iso);
+    const list = root.__dims || [];
+    assert.ok(list.length >= 3, name + ' 至少 3 条尺寸线，实际 ' + list.length);
+    for (const item of list) {
+      const edge = { x: item.edge.b.x - item.edge.a.x, y: item.edge.b.y - item.edge.a.y };
+      const dim = { x: item.line.b.x - item.line.a.x, y: item.line.b.y - item.line.a.y };
+      const deg = angleBetween(edge, dim);
+      assert.ok(deg < 1, `${name} 的 ${item.key} 尺寸线与棱差 ${deg.toFixed(2)}°`);
+    }
+  }
+});
+
+check('延长线只走等轴测的三个轴向（偏差 < 1°），不会一律水平', () => {
   for (const [name, d] of labelCases) {
     const iso = name === 'rsc' ? d : computeIsoShape(d, name);
     const root = renderIso(makeHost(420), iso);
     const ext = root.__extLines || [];
-    const hull = root.__hull;
-    assert.ok(hull && hull.length >= 3, name + ' 应记录箱体轮廓');
     for (const e of ext) {
-      assert.ok(e.x2 < e.x1, `${name} 的延长线必须朝左（${e.x1}→${e.x2}）`);
-      const left = hullLeftX(hull, e.y1);
+      const deg = axisDeviation(e.x2 - e.x1, e.y2 - e.y1);
+      assert.ok(deg < 1, `${name} 的延长线与等轴测轴差 ${deg.toFixed(2)}°（${e.x1},${e.y1}→${e.x2},${e.y2}）`);
+    }
+  }
+});
+
+check('延长线不压在可见面上（三种箱型）', () => {
+  for (const [name, d] of labelCases) {
+    const iso = name === 'rsc' ? d : computeIsoShape(d, name);
+    const root = renderIso(makeHost(420), iso);
+    const ext = root.__extLines || [];
+    const faces = root.__faces || [];
+    for (const e of ext) {
+      const p = { x: e.x1, y: e.y1 };
+      const q = { x: e.x2, y: e.y2 };
+      assert.ok(!faces.some((poly) => pointInPoly(p, poly)), `${name} 的延长线端点落在可见面上`);
+      assert.ok(!faces.some((poly) => pointInPoly(q, poly)), `${name} 的延长线末端落在可见面上`);
+      const hit = firstFaceHit(p, q, faces);
+      const len = Math.hypot(q.x - p.x, q.y - p.y);
       assert.ok(
-        e.x1 <= left + 1,
-        `${name} 的延长线起点 ${e.x1.toFixed(1)} 跑进箱体（该高度左边界 ${left.toFixed(1)}）`,
+        hit === null || len * hit > len - 3.5,
+        `${name} 的延长线穿进可见面（${(len * (hit || 1)).toFixed(1)}/${len.toFixed(1)}px）`,
       );
     }
   }
 });
+
+check('各种宽度下所有图元都在画布内（标注不被裁掉）', () => {
+  for (const width of [340, 420, 560, 760]) {
+    for (const [name, d] of labelCases) {
+      const iso = name === 'rsc' ? d : computeIsoShape(d, name);
+      const root = renderIso(makeHost(width), iso);
+      const W = Number(root.attrs.width);
+      const H = Number(root.attrs.height);
+      const inside = (x, y, what) => {
+        assert.ok(
+          x >= -1 && x <= W + 1 && y >= -1 && y <= H + 1,
+          `${name} @${width}px 的${what}跑出画布（${x.toFixed(1)}, ${y.toFixed(1)} / ${W}×${H}）`,
+        );
+      };
+      for (const el of root.walk()) {
+        const a = el.attrs;
+        if (a.x1 !== undefined) inside(Number(a.x1), Number(a.y1), '线段起点');
+        if (a.x2 !== undefined) inside(Number(a.x2), Number(a.y2), '线段终点');
+      }
+      for (const label of root.__dimLabels || []) {
+        const halfW = label.width / 2;
+        const halfH = label.height / 2;
+        inside(label.x - halfW, label.y - halfH, `标注「${label.text}」的左上角`);
+        inside(label.x + halfW, label.y + halfH, `标注「${label.text}」的右下角`);
+      }
+    }
+  }
+});
+
+
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);
