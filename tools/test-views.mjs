@@ -204,4 +204,47 @@ check('renderNet 完全按几何面板渲染（假箱型 2 个可编辑面 + 1 �
   assert.ok(gs.some((g) => g.attrs['data-panel'] === 'pb'));
 });
 
+console.log('标注不重叠（三种箱型）');
+
+const { computeIsoShape } = await import('../assets/js/geometry-shapes.js');
+
+const labelCases = [
+  ['rsc', { L: 600, W: 400, H: 300 }],
+  ['bevel', { L: 600, W: 400, Hfront: 300, Hback: 450 }],
+  ['lshape', { L: 600, Hfront: 300, Hback: 450, Wfront: 250, Wback: 150 }],
+];
+
+function boxesIntersect(a, b) {
+  return (
+    Math.abs(a.x - b.x) * 2 < a.width + b.width - 0.5 &&
+    Math.abs(a.y - b.y) * 2 < a.height + b.height - 0.5
+  );
+}
+
+check('任意两个标注文字的包围盒不相交', () => {
+  for (const [name, d] of labelCases) {
+    const iso = name === 'rsc' ? d : computeIsoShape(d, name);
+    const root = renderIso(makeHost(420), iso);
+    const labels = root.__dimLabels || [];
+    assert.ok(labels.length >= 3, name + ' 至少要有 3 个标注');
+    for (let i = 0; i < labels.length; i += 1) {
+      for (let j = i + 1; j < labels.length; j += 1) {
+        assert.ok(
+          !boxesIntersect(labels[i], labels[j]),
+          `${name} 的标注「${labels[i].text}」与「${labels[j].text}」重叠`,
+        );
+      }
+    }
+  }
+});
+
+check('L 形箱六个标注齐全（L / W / H(前) / H(后) / W(前) / W(后)）', () => {
+  const d = { L: 600, Hfront: 300, Hback: 450, Wfront: 250, Wback: 150 };
+  const root = renderIso(makeHost(420), computeIsoShape(d, 'lshape'));
+  const texts = (root.__dimLabels || []).map((l) => l.text).join(' ');
+  for (const key of ['L ', 'W ', 'H(前)', 'H(后)', 'W(前)', 'W(后)']) {
+    assert.ok(texts.includes(key), '缺少标注 ' + key + '，实际：' + texts);
+  }
+});
+
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

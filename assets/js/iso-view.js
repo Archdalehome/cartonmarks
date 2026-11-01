@@ -3,7 +3,7 @@
  * 输入 computeIso() 的三维投影结果，按容器宽度等比缩放后绘制。
  */
 
-import { svgEl, node, ensureDefs, line, textEl, pathEl, dimLine, contentWidth } from './svg.js';
+import { svgEl, node, ensureDefs, line, textEl, pathEl, dimLine, recordLabel, contentWidth } from './svg.js';
 import { computeIso } from './geometry.js';
 import { fmtLength } from './units.js';
 
@@ -27,7 +27,7 @@ export function renderIso(host, input, opts = {}) {
 
   const maxH = Math.min(430, Math.max(230, Math.round((window.innerHeight || 820) * 0.38)));
   // L 形箱的 W(前)/W(后) 要引到图形左侧外面，左边多留一点边距
-  const padLeft = iso.anchors && iso.anchors.Wfront ? 100 : PAD_X;
+  const padLeft = iso.anchors && iso.anchors.Wfront ? 158 : PAD_X;
   const scale = Math.min((cw - padLeft - PAD_X) / bw, (maxH - PAD_Y * 2) / bh);
 
   const totalH = Math.round(bh * scale + PAD_Y * 2);
@@ -68,19 +68,14 @@ export function renderIso(host, input, opts = {}) {
     y: (minY + maxY) / 2 * scale + oy,
   };
   const hasFront = Number.isFinite(Number(dims.Hfront));
-  // 主标注优先（L / W / H(前)），台阶的 W(前)、W(后) 与 H(后) 放次要偏移，避免糊成一团
+  // 主标注：L / W；矩形箱的 H 也在右侧竖棱上
   const dims3 = [
     { key: 'L', label: `L ${fmtLength(dims.L, unit)}`, offset: 26 },
     { key: 'W', label: `W ${fmtLength(dims.W, unit)}`, offset: 26 },
-    {
-      key: 'H',
-      label: hasFront ? `H(前) ${fmtLength(dims.Hfront, unit)}` : `H ${fmtLength(dims.H, unit)}`,
-      // 有台阶/斜面时前右那条竖棱旁边还有 W(前) 标注，H(前) 往外让一点
-      offset: 26,
-    },
   ];
-  // 主标注统一偏移 26；H(后) 在后箱面竖棱上，往外让一点
-  const DIM_OFFSET = 26;
+  if (!hasFront) {
+    dims3.push({ key: 'H', label: `H ${fmtLength(dims.H, unit)}`, offset: 26 });
+  }
   if (iso.anchors.Hback) {
     dims3.push({ key: 'Hback', label: `H(后) ${fmtLength(dims.Hback, unit)}`, offset: 42 });
   }
@@ -92,11 +87,15 @@ export function renderIso(host, input, opts = {}) {
     dimLine(root, { a, b, label: item.label, offset: item.offset, center });
   }
 
-  // W(前) / W(后)：平行于顶面棱，整体平移到图形左侧外面，用细虚线延长线引出去
+  // 左侧外引标注：W(前)/W(后) 平行于顶面棱，H(前) 用另一条引线指到左下角外
   const screenX = (id) => P(id).x;
   const allX = Object.keys(iso.corners).map(screenX);
   const minScreenX = Math.min(...allX);
-  const dimOutside = (key, label, targetX) => {
+  /**
+   * 把某条棱的尺寸线整体平移到图形左侧外面用细虚线引出去。
+   * labelAt: 文字落在这条尺寸线上的位置（0..1），用来把两条平行标注错开。
+   */
+  const dimOutside = (key, label, targetX, labelAt = 0.5) => {
     const anchor = iso.anchors[key];
     if (!anchor) return;
     const a = P(anchor[0]);
@@ -114,19 +113,28 @@ export function renderIso(host, input, opts = {}) {
         'marker-end': 'url(#cm-dim-arrow)',
       }),
     );
+    // 文字垂直于尺寸线方向让开一点，压在上方
+    const isVerticalLine = Math.abs(a2.x - b2.x) < 1;
+    const lx = a2.x + (b2.x - a2.x) * labelAt + (isVerticalLine ? -8 : 0);
+    const ly = a2.y + (b2.y - a2.y) * labelAt - (isVerticalLine ? 0 : 7);
     root.appendChild(
-      textEl((a2.x + b2.x) / 2, (a2.y + b2.y) / 2 - 7, label, {
+      textEl(lx, ly, label, {
         class: 'dim-text',
         'text-anchor': 'middle',
         'dominant-baseline': 'middle',
       }),
     );
+    recordLabel(root, label, lx, ly, isVerticalLine ? -90 : 0);
   };
   if (iso.anchors.Wback) {
-    dimOutside('Wback', `W(后) ${fmtLength(dims.Wback, unit)}`, minScreenX - 104);
+    // 两条平行标注一个靠上、一个靠下，避免文字包围盒相交
+    dimOutside('Wback', `W(后) ${fmtLength(dims.Wback, unit)}`, minScreenX - 96, 0.2);
   }
   if (iso.anchors.Wfront) {
-    dimOutside('Wfront', `W(前) ${fmtLength(dims.Wfront, unit)}`, minScreenX - 64);
+    dimOutside('Wfront', `W(前) ${fmtLength(dims.Wfront, unit)}`, minScreenX - 96, 0.85);
+  }
+  if (hasFront && iso.anchors.H) {
+    dimOutside('H', `H(前) ${fmtLength(dims.Hfront, unit)}`, minScreenX - 44, 0.5);
   }
 
   host.replaceChildren(root);
