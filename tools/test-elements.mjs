@@ -1,4 +1,4 @@
-/**
+﻿/**
  * tools/test-elements.mjs —— 元素工厂与边界规则
  * 用法：node tools/test-elements.mjs
  */
@@ -10,6 +10,11 @@ import {
   elementLabel,
   elementKindLabel,
   deepCopyElement,
+  rotateElement,
+  normalizeRotation,
+  contentBox,
+  contentOrigin,
+  rotatePoint,
 } from '../assets/js/elements.js';
 
 let passed = 0;
@@ -99,4 +104,111 @@ check('文字元素默认仍在面板内', () => {
   assert.ok(t.y + t.h <= 300 + 1e-9);
 });
 
+console.log('旋转 90°');
+
+check('顺时针转四次回到 0°，且每次都换回原尺寸', () => {
+  const el = createTextElement(600, 300, { text: '旋转测试', fontSize: 20 });
+  const w0 = el.w;
+  const h0 = el.h;
+  for (let i = 0; i < 4; i += 1) rotateElement(el, 1, 600, 300);
+  assert.equal(normalizeRotation(el.rotation), 0);
+  assert.ok(Math.abs(el.w - w0) < 1e-9 && Math.abs(el.h - h0) < 1e-9, '转 4 次尺寸要回到原样');
+});
+
+check('转 90° 后外接框 W/H 互换，中心不动', () => {
+  const el = createTextElement(600, 300, { text: '小心轻放', fontSize: 20 });
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const w0 = el.w;
+  const h0 = el.h;
+  rotateElement(el, 1, 600, 300);
+  assert.equal(el.rotation, 90);
+  assert.ok(Math.abs(el.w - h0) < 1e-9, 'W 应变成原来的 H');
+  assert.ok(Math.abs(el.h - w0) < 1e-9, 'H 应变成原来的 W');
+  assert.ok(Math.abs(el.x + el.w / 2 - cx) < 1e-9, 'X 中心不动');
+  assert.ok(Math.abs(el.y + el.h / 2 - cy) < 1e-9, 'Y 中心不动');
+});
+
+check('逆时针与顺时针各转一次，角度抵消回 0°，尺寸也回原样', () => {
+  const el = createLineElement(600, 300);
+  const w0 = el.w;
+  const h0 = el.h;
+  rotateElement(el, 1, 600, 300);
+  rotateElement(el, -1, 600, 300);
+  assert.equal(el.rotation, 0);
+  assert.ok(Math.abs(el.w - w0) < 1e-9 && Math.abs(el.h - h0) < 1e-9);
+});
+
+check('贴边元素转 90° 后仍被夹在面板内', () => {
+  const el = createTextElement(600, 300, { text: '边角', fontSize: 20 });
+  el.x = 0;
+  el.y = 0;
+  el.w = 200;
+  el.h = 40;
+  rotateElement(el, 1, 600, 300);
+  assert.ok(el.w <= 600 && el.h <= 300, '尺寸不超面板');
+  assert.ok(el.x >= 0 && el.x + el.w <= 600 + 1e-9, 'X 在面板内');
+  assert.ok(el.y >= 0 && el.y + el.h <= 300 + 1e-9, 'Y 在面板内');
+  assert.equal(el.rotation, 90);
+});
+
+check('内容框：转 90/270 时与外接框互换，180 时不变', () => {
+  const el = createTextElement(600, 300, { text: 'A', fontSize: 20 });
+  el.w = 200;
+  el.h = 40;
+  el.rotation = 0;
+  assert.deepEqual(contentBox(el), { w: 200, h: 40 });
+  el.rotation = 90;
+  assert.deepEqual(contentBox(el), { w: 40, h: 200 });
+  el.rotation = 180;
+  assert.deepEqual(contentBox(el), { w: 200, h: 40 });
+  el.rotation = 270;
+  assert.deepEqual(contentBox(el), { w: 40, h: 200 });
+});
+
+check('内容框绕中心转过去正好铺满外接框（PDF 落位就靠这个）', () => {
+  for (const rot of [0, 90, 180, 270]) {
+    const el = { x: 10, y: 20, w: rot % 180 === 90 ? 40 : 200, h: rot % 180 === 90 ? 200 : 40, rotation: rot };
+    const box = contentOrigin(el, 0, 0);
+    const cx = el.w / 2;
+    const cy = el.h / 2;
+    const corners = [
+      [box.x, box.y],
+      [box.x + box.w, box.y],
+      [box.x + box.w, box.y + box.h],
+      [box.x, box.y + box.h],
+    ].map(([x, y]) => rotatePoint(x, y, cx, cy, rot));
+    const xs = corners.map((p) => p.x);
+    const ys = corners.map((p) => p.y);
+    assert.ok(Math.abs(Math.min(...xs) - 0) < 1e-9, `${rot}° 左边应贴 0`);
+    assert.ok(Math.abs(Math.max(...xs) - el.w) < 1e-9, `${rot}° 右边应贴外接框宽`);
+    assert.ok(Math.abs(Math.min(...ys) - 0) < 1e-9, `${rot}° 上边应贴 0`);
+    assert.ok(Math.abs(Math.max(...ys) - el.h) < 1e-9, `${rot}° 下边应贴外接框高`);
+  }
+});
+check('旧数据没有 rotation 字段时按 0 处理，非法角度被归一到 90 的倍数', () => {
+  const el = createTextElement(600, 300, { text: '旧数据' });
+  delete el.rotation;
+  clampElement(el, 600, 300);
+  assert.equal(el.rotation, 0);
+  assert.equal(normalizeRotation(undefined), 0);
+  assert.equal(normalizeRotation(450), 90);
+  assert.equal(normalizeRotation(-90), 270);
+  assert.equal(normalizeRotation(37), 0);
+});
+
+check('旋转后再深拷贝（复制到另一面），角度和尺寸都跟着走', () => {
+  const el = createTextElement(600, 300, { text: '复制我', fontSize: 20 });
+  rotateElement(el, 1, 600, 300);
+  const copy = deepCopyElement(el);
+  assert.equal(copy.rotation, 90);
+  assert.equal(copy.w, el.w);
+  assert.equal(copy.h, el.h);
+  assert.notEqual(copy.id, el.id);
+});
+
+check('rotatePoint：绕中心顺时针 90°，(右,中) 转到 (中,下)', () => {
+  const p = rotatePoint(100, 50, 50, 50, 90);
+  assert.ok(Math.abs(p.x - 50) < 1e-9 && Math.abs(p.y - 100) < 1e-9);
+});
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

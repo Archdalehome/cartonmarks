@@ -1,11 +1,11 @@
-/**
+﻿/**
  * editor.js —— 面板放大编辑画布
  *
  * 职责：把某一面的元素按真实毫米 × 缩放画出来，处理选中、拖动、四角缩放、对齐辅助线。
  * 元素坐标始终是毫米，这里只在读写 DOM 时乘 scale。
  */
 
-import { clamp } from './elements.js';
+import { clamp, contentBox, normalizeRotation } from './elements.js';
 
 const HANDLES = ['nw', 'ne', 'sw', 'se'];
 const MIN_SIZE_MM = 3;
@@ -106,6 +106,15 @@ export function createEditor({ host, callbacks }) {
     node.dataset.id = el.id;
     applyNodeBox(node, el);
 
+    // 外面这层是屏幕上的外接框（拖动、手柄都按它算）；里面按「没旋转时」的内容框画，再整体转
+    const inner = document.createElement('div');
+    inner.className = 'ed-el-inner';
+    const box = contentBox(el);
+    inner.style.width = `${box.w * scale}px`;
+    inner.style.height = `${box.h * scale}px`;
+    inner.style.transform = `translate(-50%, -50%) rotate(${normalizeRotation(el.rotation)}deg)`;
+    node.appendChild(inner);
+
     if (el.type === 'text') {
       const t = document.createElement('div');
       t.className = 'ed-text';
@@ -113,19 +122,19 @@ export function createEditor({ host, callbacks }) {
       t.style.fontSize = `${Math.max(1, el.fontSize * scale)}px`;
       t.style.fontWeight = el.bold ? '700' : '400';
       t.style.textAlign = el.align || 'left';
-      node.appendChild(t);
+      inner.appendChild(t);
     } else if (el.type === 'image') {
       const img = document.createElement('img');
       img.className = 'ed-img';
       img.src = el.src;
       img.alt = '箱唛图片';
       img.draggable = false;
-      node.appendChild(img);
+      inner.appendChild(img);
     } else if (el.type === 'line') {
       const bar = document.createElement('div');
       bar.className = 'ed-line';
       bar.style.backgroundColor = el.color || '#000000';
-      node.appendChild(bar);
+      inner.appendChild(bar);
     }
 
     node.addEventListener('pointerdown', (ev) => startDrag(ev, el));

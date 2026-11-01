@@ -1,4 +1,4 @@
-﻿/**
+/**
  * app.js —— 页面装配与交互
  *
  * 数据流：输入（毫米）→ 几何计算 → 视图绘制；
@@ -24,7 +24,7 @@ import { renderIso } from './iso-view.js';
 import { createEditor } from './editor.js';
 import { renderProperties, syncNumberFields } from './properties.js';
 import { History } from './history.js';
-import { clampElement, createTextElement, createImageElement, createLineElement, deepCopyElement } from './elements.js';
+import { clampElement, createTextElement, createImageElement, createLineElement, deepCopyElement, rotateElement } from './elements.js';
 import { validateDim, displayValue, unitSuffix, fmt, fmtLength, withUnit } from './units.js';
 import { initAccountUI, currentAccount, isSubscribed, openLogin, openSubscribe, refreshAccount, handleApiError } from './auth-ui.js';
 import { exportPdf, imageReport } from './pdf-export.js';
@@ -876,6 +876,7 @@ function renderProps() {
       addImage: () => openElementDialog('image'),
       addLine: () => openElementDialog('line'),
       setLineOrientation,
+      rotate: rotateElementById,
       clear: clearPanel,
     },
   });
@@ -931,6 +932,19 @@ function patchElement(id, values, coalesceKey = '') {
   editor.render();
   pushHistory({ coalesceKey });
   persistSoon();
+}
+
+/** 旋转 90°：dir = 1 顺时针、-1 逆时针（以元素中心为轴，W/H 互换后夹回面板） */
+function rotateElementById(id, dir) {
+  const element = currentElements().find((e) => e.id === id);
+  if (!element || !state.selected) return;
+  const geo = lastNet.panels[state.selected];
+  rotateElement(element, dir, geo.w, geo.h);
+  editor.render();
+  renderProps();
+  pushHistory();
+  persistSoon();
+  updateSelectionInfo();
 }
 
 function removeElement(id) {

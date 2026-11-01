@@ -9,6 +9,7 @@
  * 只有矢量的文字路径、图片、裁切/折叠线；尺寸线、辅助线、选中框一律不导出。
  */
 
+import { normalizeRotation, rotatePoint, contentOrigin } from './elements.js';
 import {
   computePageSize,
   collectPages,
@@ -69,18 +70,67 @@ function hexToRgb(hex) {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** 线条 = 实心矩形，按元素颜色填充 */
+/** 线条 = 实心矩形，按元素颜色填充；旋转时把四个角转过去再画多边形 */
 function drawLine(doc, element, dx, dy, scale) {
   const [r, g, b] = hexToRgb(element.color);
   doc.setFillColor(r, g, b);
   doc.setDrawColor(r, g, b);
-  doc.rect(dx, dy, element.w * scale, element.h * scale, 'F');
+
+  const rot = normalizeRotation(element.rotation);
+  const box = contentOrigin(element, 0, 0); // 毫米，左上角相对外接框
+  const left = dx + box.x * scale;
+  const top = dy + box.y * scale;
+  const w = box.w * scale;
+  const h = box.h * scale;
+
+  if (!rot) {
+    doc.rect(left, top, w, h, 'F');
+    return;
+  }
+
+  const cx = dx + (element.w * scale) / 2;
+  const cy = dy + (element.h * scale) / 2;
+  const corners = [
+    [left, top],
+    [left + w, top],
+    [left + w, top + h],
+    [left, top + h],
+  ].map(([x, y]) => rotatePoint(x, y, cx, cy, rot));
+
+  doc.moveTo(corners[0].x, corners[0].y);
+  for (let i = 1; i < corners.length; i += 1) doc.lineTo(corners[i].x, corners[i].y);
+  doc.fill();
 }
 
 function imageFormat(src) {
   if (/^data:image\/png/i.test(src)) return 'PNG';
   if (/^data:image\/jpe?g/i.test(src)) return 'JPEG';
   return 'PNG';
+}
+
+/**
+ * 图片旋转：把位图按 90/180/270 预转（像素置换，不损失质量），
+ * 再按元素外接框贴进 PDF —— 比依赖 jsPDF 的旋转参数可靠。
+ */
+async function rotatedImageSrc(src, rot) {
+  if (!rot) return src;
+  const img = await new Promise((resolve, reject) => {
+    const node = new Image();
+    node.onload = () => resolve(node);
+    node.onerror = () => reject(new Error('图片解码失败'));
+    node.src = src;
+  });
+  const swap = rot % 180 === 90;
+  const w = swap ? img.naturalHeight : img.naturalWidth;
+  const h = swap ? img.naturalWidth : img.naturalHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, w);
+  canvas.height = Math.max(1, h);
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((rot * Math.PI) / 180);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  return canvas.toDataURL('image/png');
 }
 
 /* ── 文字 ───────────────────────────────────────── */
@@ -122,20 +172,30 @@ export function wrapText(font, text, size, maxWidth) {
   return lines;
 }
 
-function pathToDoc(doc, path) {
+/**
+ * 把字形路径写进 PDF。tf 是可选的点变换（旋转用）：所有坐标先过它再落笔，
+ * 这样转 90/180/270 时是「路径真的转了」，不是靠 jsPDF 的文字角度。
+ */
+function pathToDoc(doc, path, tf = null) {
+  const T = (x, y) => (tf ? tf(x, y) : { x, y });
   let cx = 0;
   let cy = 0;
   for (const cmd of path.commands) {
     if (cmd.type === 'M') {
-      doc.moveTo(cmd.x, cmd.y);
+      const p = T(cmd.x, cmd.y);
+      doc.moveTo(p.x, p.y);
       cx = cmd.x;
       cy = cmd.y;
     } else if (cmd.type === 'L') {
-      doc.lineTo(cmd.x, cmd.y);
+      const p = T(cmd.x, cmd.y);
+      doc.lineTo(p.x, p.y);
       cx = cmd.x;
       cy = cmd.y;
     } else if (cmd.type === 'C') {
-      doc.curveTo(cmd.x1, cmd.y1, cmd.x2, cmd.y2, cmd.x, cmd.y);
+      const p1 = T(cmd.x1, cmd.y1);
+      const p2 = T(cmd.x2, cmd.y2);
+      const p = T(cmd.x, cmd.y);
+      doc.curveTo(p1.x, p1.y, p2.x, p2.y, p.x, p.y);
       cx = cmd.x;
       cy = cmd.y;
     } else if (cmd.type === 'Q') {
@@ -144,7 +204,10 @@ function pathToDoc(doc, path) {
       const c1y = cy + (2 / 3) * (cmd.y1 - cy);
       const c2x = cmd.x + (2 / 3) * (cmd.x1 - cmd.x);
       const c2y = cmd.y + (2 / 3) * (cmd.y1 - cmd.y);
-      doc.curveTo(c1x, c1y, c2x, c2y, cmd.x, cmd.y);
+      const p1 = T(c1x, c1y);
+      const p2 = T(c2x, c2y);
+      const p = T(cmd.x, cmd.y);
+      doc.curveTo(p1.x, p1.y, p2.x, p2.y, p.x, p.y);
       cx = cmd.x;
       cy = cmd.y;
     } else if (cmd.type === 'Z') {
@@ -154,8 +217,18 @@ function pathToDoc(doc, path) {
 }
 
 function drawText(doc, font, element, dx, dy, scale) {
+  const rot = normalizeRotation(element.rotation);
+  // 内容框在屏幕外接框里居中；旋转 90/270 时内容框的宽高与 w/h 互换
+  const box = contentOrigin(element, 0, 0);
+  const boxW = box.w * scale;
+  const left = dx + box.x * scale;
+  const top = dy + box.y * scale;
+  const centerX = dx + (element.w * scale) / 2;
+  const centerY = dy + (element.h * scale) / 2;
+  const tf = rot ? (px, py) => rotatePoint(px, py, centerX, centerY, rot) : null;
+
   const size = Math.max(1, element.fontSize) * scale;
-  const lines = wrapText(font, element.text, size, element.w * scale);
+  const lines = wrapText(font, element.text, size, boxW);
   const ascent = font.ascender / font.unitsPerEm;
   const descent = -font.descender / font.unitsPerEm;
   const lead = (LINE_HEIGHT - (ascent + descent)) / 2 + ascent;
@@ -166,20 +239,20 @@ function drawText(doc, font, element, dx, dy, scale) {
   lines.forEach((line, index) => {
     if (!line) return;
     const width = font.getAdvanceWidth(line, size);
-    let x = dx;
-    if (element.align === 'center') x = dx + (element.w * scale - width) / 2;
-    else if (element.align === 'right') x = dx + element.w * scale - width;
+    let x = left;
+    if (element.align === 'center') x = left + (boxW - width) / 2;
+    else if (element.align === 'right') x = left + boxW - width;
 
-    const baseline = dy + (lead + index * LINE_HEIGHT) * size;
+    const baseline = top + (lead + index * LINE_HEIGHT) * size;
     const path = font.getPath(line, x, baseline, size);
 
-    pathToDoc(doc, path);
+    pathToDoc(doc, path, tf);
     doc.fill();
 
     if (element.bold) {
       doc.setLineWidth(Math.max(0.05, size * 0.03));
       doc.setLineJoin(1);
-      pathToDoc(doc, font.getPath(line, x, baseline, size));
+      pathToDoc(doc, font.getPath(line, x, baseline, size), tf);
       doc.stroke();
     }
   });
@@ -381,7 +454,10 @@ export async function exportPdf({
             if (dpi < MIN_DPI) {
               lowDpi.push(`${Math.round(dpi)} dpi（${Math.round(element.w)} × ${Math.round(element.h)} mm）`);
             }
-            doc.addImage(element.src, imageFormat(element.src), dx, dy, element.w * drawScale, element.h * drawScale);
+            // 有旋转就先把位图转好再贴，落在元素外接框里
+            const rot = normalizeRotation(element.rotation);
+            const src = await rotatedImageSrc(element.src, rot);
+            doc.addImage(src, imageFormat(src), dx, dy, element.w * drawScale, element.h * drawScale);
           } catch (err) {
             console.warn('图片解码失败，导出时跳过', err);
             warnings.push('有一张图片解码失败，已跳过');

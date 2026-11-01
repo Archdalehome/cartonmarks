@@ -899,3 +899,13 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 }
 .piece-slot .canvas { padding: 0; }
 
+
+/* 旋转：外层是屏幕外接框（拖动/手柄），内层按未旋转尺寸居中后再转 */
+.ed-el-inner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: 50% 50%;
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+.ed-el-inner > * { display: block; }

@@ -1,9 +1,9 @@
-/**
+﻿/**
  * properties.js —— 右侧属性面板
  * 纯 DOM 渲染 + 回调，不持有状态。
  */
 
-import { elementKindLabel, elementLabel } from './elements.js';
+import { elementKindLabel, elementLabel, normalizeRotation } from './elements.js';
 import { SLOT_LABELS } from './project.js';
 import { fmt } from './units.js';
 
@@ -124,6 +124,26 @@ export function renderProperties(host, ctx) {
     h('div', { class: 'prop-row' }, [
       h('label', { text: '类型' }),
       h('span', { text: `${elementKindLabel(selected)}${selected.type === 'image' ? ' · 拖角等比缩放' : ''}` }),
+    ]),
+    h('div', { class: 'prop-row' }, [
+      h('label', { text: '旋转' }),
+      h('span', { text: `${normalizeRotation(selected.rotation)}°` }),
+    ]),
+    h('div', { class: 'prop-actions', style: 'margin-top:6px' }, [
+      h('button', {
+        type: 'button',
+        class: 'btn btn-ghost',
+        title: '以元素中心为轴逆时针转 90°',
+        text: '↺ 逆时针 90°',
+        onclick: () => callbacks.rotate(selected.id, -1),
+      }),
+      h('button', {
+        type: 'button',
+        class: 'btn btn-ghost',
+        title: '以元素中心为轴顺时针转 90°',
+        text: '↻ 顺时针 90°',
+        onclick: () => callbacks.rotate(selected.id, 1),
+      }),
     ]),
     h('div', { class: 'prop-grid' }, [
       numberField('propX', 'X（mm）', 'x'),

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * elements.js —— 箱唛元素的纯数据操作
  *
  * 所有坐标、尺寸、字号都是毫米（相对面板左上角），换算是视图层的事。
@@ -29,8 +29,64 @@ export function clampElement(el, panelW, panelH) {
   el.h = clamp(Number(el.h) || 0, minSide, panelH);
   el.x = clamp(Number(el.x) || 0, 0, Math.max(0, panelW - el.w));
   el.y = clamp(Number(el.y) || 0, 0, Math.max(0, panelH - el.h));
-  el.rotation = Number(el.rotation) || 0;
+  el.rotation = normalizeRotation(el.rotation);
   return el;
+}
+
+/* ── 旋转 ─────────────────────────────────────────── */
+
+/** 角度只取 0/90/180/270；旧数据没有这个字段就是 0 */
+export function normalizeRotation(v) {
+  const n = Math.round((Number(v) || 0) / 90) * 90;
+  return ((n % 360) + 360) % 360;
+}
+
+/**
+ * 元素「没旋转时」的内容框尺寸。
+ * 约定：w/h 是屏幕上的外接框，转 90/270 时内容框和它互换。
+ */
+export function contentBox(el) {
+  return normalizeRotation(el.rotation) % 180 === 90
+    ? { w: el.h, h: el.w }
+    : { w: el.w, h: el.h };
+}
+
+/**
+ * 顺时针（dir > 0）或逆时针 90°：绕元素中心转、外接框 W/H 互换、再夹回面板边界。
+ * 角度按 0/90/180/270 存，不做自由角度。
+ */
+export function rotateElement(el, dir, panelW, panelH) {
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const nw = el.h;
+  const nh = el.w;
+  el.rotation = normalizeRotation(normalizeRotation(el.rotation) + (dir > 0 ? 90 : -90));
+  el.w = nw;
+  el.h = nh;
+  el.x = cx - nw / 2;
+  el.y = cy - nh / 2;
+  return clampElement(el, panelW, panelH);
+}
+
+/** 绕 (cx, cy) 顺时针转 deg 度（屏幕坐标 y 向下，与 CSS / PDF 一致） */
+export function rotatePoint(x, y, cx, cy, deg) {
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = x - cx;
+  const dy = y - cy;
+  return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+}
+
+/** 元素内容框在屏幕外接框里的左上角（内容框比外接框小的时候居中放） */
+export function contentOrigin(el, boxLeft, boxTop) {
+  const box = contentBox(el);
+  return {
+    x: boxLeft + (el.w - box.w) / 2,
+    y: boxTop + (el.h - box.h) / 2,
+    w: box.w,
+    h: box.h,
+  };
 }
 
 function estimateTextWidth(text, fontSize) {
@@ -134,10 +190,13 @@ export function elementLabel(el) {
     return t.length > 18 ? `${t.slice(0, 18)}…` : t || '文字';
   }
   if (el.type === 'line') {
-    const thickness = el.orientation === 'vertical' ? el.w : el.h;
+    // 用「没旋转时」的框算粗细，转 90° 后仍然是原来的粗细
+    const box = contentBox(el);
+    const thickness = el.orientation === 'vertical' ? box.w : box.h;
     return `${el.orientation === 'vertical' ? '竖线' : '横线'} · ${Math.round(thickness * 10) / 10} mm`;
   }
-  return `${Math.round(el.w)} × ${Math.round(el.h)} mm`;
+  const box = contentBox(el);
+  return `${Math.round(box.w)} × ${Math.round(box.h)} mm`;
 }
 
 export function elementKindLabel(el) {
