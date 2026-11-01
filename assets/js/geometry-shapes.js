@@ -350,11 +350,11 @@ function profileOf(shapeId, dims) {
  */
 export function computeIsoShape(dims, shapeId) {
   const L = pos(dims.L, 1);
+  const Hf = pos(dims.Hfront ?? dims.H, 1);
+  const Hb = pos(dims.Hback ?? dims.H, 1);
+  const Wf = Number(dims.Wfront);
   // 与 computeNet 用同一个宽度口径：斜形用 W，L 形用 W(前)+W(后)
-  const W =
-    shapeId === 'bevel'
-      ? pos(dims.W, 1)
-      : Number(dims.Wfront) + Number(dims.Wback);
+  const W = shapeId === 'bevel' ? pos(dims.W, 1) : Wf + Number(dims.Wback);
   const profile = profileOf(shapeId, dims);
   const n = profile.length;
 
@@ -482,7 +482,16 @@ export function computeIsoShape(dims, shapeId) {
     anchors: {
       L: ['a' + iF, 'b' + iF],
       W: ['b' + iB, 'b' + iF],
-      H: ['b' + iF, 'b' + iT],
+      H: ['a' + iF, 'a' + iT],
+      // 后箱面竖棱上的 H(后)
+      Hback: ['b' + iB, 'b' + at(idx(0, Hb), iB)],
+      ...(shapeId === 'lshape'
+        ? {
+            // 台阶两个顶面上的 W(前) / W(后)
+            Wfront: ['b' + at(idx(W - Wf, Hf), iF), 'b' + at(idx(W, Hf), iF)],
+            Wback: ['b' + at(idx(0, Hb), iB), 'b' + at(idx(W - Wf, Hb), iB)],
+          }
+        : {}),
     },
     dims: { ...dims, L, W },
   };

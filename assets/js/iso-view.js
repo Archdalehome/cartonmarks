@@ -66,17 +66,31 @@ export function renderIso(host, input, opts = {}) {
     y: (minY + maxY) / 2 * scale + oy,
   };
   const hasFront = Number.isFinite(Number(dims.Hfront));
+  // 主标注优先（L / W / H(前)），台阶的 W(前)、W(后) 与 H(后) 放次要偏移，避免糊成一团
   const dims3 = [
     { key: 'L', label: `L ${fmtLength(dims.L, unit)}`, offset: 26 },
     { key: 'W', label: `W ${fmtLength(dims.W, unit)}`, offset: 26 },
     {
       key: 'H',
       label: hasFront ? `H(前) ${fmtLength(dims.Hfront, unit)}` : `H ${fmtLength(dims.H, unit)}`,
+      // 有台阶/斜面时前右那条竖棱旁边还有 W(前) 标注，H(前) 往外让一点
       offset: 26,
     },
   ];
+  if (iso.anchors.Wfront) {
+    dims3.push({ key: 'Wfront', label: `W(前) ${fmtLength(dims.Wfront, unit)}`, offset: 16 });
+  }
+  if (iso.anchors.Wback) {
+    dims3.push({ key: 'Wback', label: `W(后) ${fmtLength(dims.Wback, unit)}`, offset: 16 });
+  }
+  if (iso.anchors.Hback) {
+    dims3.push({ key: 'Hback', label: `H(后) ${fmtLength(dims.Hback, unit)}`, offset: 34 });
+  }
   for (const item of dims3) {
-    const [a, b] = iso.anchors[item.key].map(P);
+    const anchor = iso.anchors[item.key];
+    if (!anchor) continue;
+    const [a, b] = anchor.map(P);
+    if (!a || !b) continue;
     dimLine(root, { a, b, label: item.label, offset: item.offset, center });
   }
 
