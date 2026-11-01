@@ -88,13 +88,10 @@ const dom = {
   brandSub: el('brandSub'),
   serviceBanner: el('serviceBanner'),
   mobileHint: el('mobileHint'),
-  exportPaper: el('exportPaper'),
-  tilePaperField: el('tilePaperField'),
   exportBtn: el('exportBtn'),
   exportDialog: el('exportDialog'),
   exportForm: el('exportForm'),
   exportSummary: el('exportSummary'),
-  exportMode: el('exportMode'),
   exportFileName: el('exportFileName'),
   exportWarnings: el('exportWarnings'),
   exportConfirmBtn: el('exportConfirmBtn'),
@@ -1288,16 +1285,16 @@ function exportSheets() {
   ];
 }
 
-/** 文件名里的形状标签：天地盖带上两个高度（cartonmark_tiandi_600x400_300-290_日期.pdf） */
-function fileNameTag() {
+/** 文件名里的尺寸段：天地盖带上两件的高度（600x400_300-290），其他箱型交给 dimsTag */
+function fileNameSizeTag() {
   if (state.shape !== 'tiandi') return '';
   const { lid, base } = tiandiDerived(safeDims(state.dims));
-  return `tiandi_${Math.round(lid.L)}x${Math.round(lid.W)}_${Math.round(lid.H)}-${Math.round(base.H)}`;
+  return `${Math.round(lid.L)}x${Math.round(lid.W)}_${Math.round(lid.H)}-${Math.round(base.H)}`;
 }
 
 async function openExportDialog() {
   if (!lastNet) return;
-  dom.exportFileName.value = exportFileName(state.dims, new Date(), fileNameTag());
+  dom.exportFileName.value = exportFileName(state.dims, new Date(), state.shape, fileNameSizeTag());
   await refreshExportSummary();
   if (typeof dom.exportDialog.showModal === 'function') dom.exportDialog.showModal();
   else dom.exportDialog.setAttribute('open', '');
@@ -1305,9 +1302,6 @@ async function openExportDialog() {
 
 async function refreshExportSummary() {
   if (!lastNet) return;
-  const mode = dom.exportMode.value === 'panel' ? 'panel' : dom.exportMode.value === 'tile' ? 'tile' : 'sheet';
-  const tilePaper = dom.exportPaper.value === 'a4' ? 'a4' : 'a3';
-  dom.tilePaperField.hidden = mode !== 'tile';
 
   // 两件套每件各算一套，页数和尺寸分别列出来
   const sheets = exportSheets();
@@ -1316,7 +1310,7 @@ async function refreshExportSummary() {
     : [{ label: '', net: lastNet, panels: state.panels }];
   const statsList = units.map((u) => ({
     ...u,
-    stats: summarize({ net: u.net, panels: u.panels, mode, tilePaper }),
+    stats: summarize({ net: u.net, panels: u.panels }),
   }));
   const totalElements = statsList.reduce((n, u) => n + u.stats.elementCount, 0);
   const totalPanels = statsList.reduce((n, u) => n + u.stats.usedPanels, 0);
@@ -1327,19 +1321,14 @@ async function refreshExportSummary() {
     .map((u) => {
       const p = u.stats.pageSize;
       const tag = u.label ? `${u.label} ` : '';
-      return `${tag}<b>${fmt(p.width)} × ${fmt(p.height)} mm</b>`;
+      return `${tag}A4 横向 · 缩放至 <b>${(p.scale * 100).toFixed(1)}%</b>`;
     })
     .join(' · ');
 
   dom.exportSummary.innerHTML =
-    `页面尺寸：${sizeText}（1:1${statsList.some((u) => u.stats.pageSize.scaled) ? '，已缩放' : ''}）<br>` +
+    `${sizeText} · 四周留白 5%（${fmt(statsList[0].stats.pageSize.width)} × ${fmt(statsList[0].stats.pageSize.height)} mm）<br>` +
     `包含内容：<b>${totalPanels}</b> 个面 · <b>${totalElements}</b> 个元素（${totalImages} 张图片）<br>` +
-    `页数：<b>${totalPages}</b> 页` +
-    (mode === 'tile'
-      ? `<br>拼版：${statsList
-          .map((u) => `<b>${u.label ? u.label + ' ' : ''}${u.stats.tilePlan.cols} 列 × ${u.stats.tilePlan.rows} 行 = ${u.stats.tilePlan.tiles.length} 块</b>`)
-          .join(' + ')}（1:1，不缩放，天/地盖分开编号）`
-      : '');
+    `页数：<b>${totalPages}</b> 页`;
 
   dom.exportWarnings.replaceChildren();
   const warn = (text, cls = '') => {
@@ -1352,17 +1341,9 @@ async function refreshExportSummary() {
   if (totalElements === 0) {
     warn('还没有任何箱唛内容，先加文字或图片再导出。', 'is-error');
   }
+  warn('A4 横向版式图：按 100% 打印是 A4 实际大小，展开图等比缩放到纸内。这份文件用于对版与存档，不是 1:1 刀模。');
   if (sheets) {
-    warn('天地盖会出两页：第 1 页天盖、第 2 页地盖，各自 1:1；某一页没放内容也会照样出页，打印店按页数对位。');
-  }
-  for (const u of statsList) {
-    if (!u.stats.tilePlan) continue;
-    warn(`${u.label ? u.label + '：' : ''}拼版共 ${u.stats.tilePlan.tiles.length} 块，每块边角有裁切标记，块上标了件名、块号和「接边」方向；拼接后即为 1:1 整图。`);
-  }
-  for (const u of statsList) {
-    const page = u.stats.pageSize;
-    if (!page.scaled) continue;
-    warn(`${u.label ? u.label + '：' : ''}展开图 ${fmt(u.net.width)} × ${fmt(u.net.height)} mm 超过 PDF 单页上限 ${page.limit} mm，已等比缩到 ${(page.scale * 100).toFixed(1)}%，打印时需按同比例放大。`);
+    warn('天地盖会出两页：第 1 页天盖、第 2 页地盖，都是 A4 横向；某一页没放内容也会照样出页。');
   }
   if (totalImages) {
     for (const u of statsList) {
@@ -1394,8 +1375,6 @@ async function submitExport(ev) {
       panels: state.panels,
       dims: state.dims,
       sheets: exportSheets(),
-      mode: dom.exportMode.value === 'panel' ? 'panel' : dom.exportMode.value === 'tile' ? 'tile' : 'sheet',
-      tilePaper: dom.exportPaper.value === 'a4' ? 'a4' : 'a3',
       fileName: dom.exportFileName.value.trim() || undefined,
       download: true,
     });
@@ -1483,8 +1462,6 @@ function bindEvents() {
   dom.redoBtn.addEventListener('click', redo);
 
   dom.exportBtn.addEventListener('click', openExportDialog);
-  dom.exportMode.addEventListener('change', refreshExportSummary);
-  dom.exportPaper.addEventListener('change', refreshExportSummary);
   dom.exportForm.addEventListener('submit', submitExport);
   dom.exportCancelBtn.addEventListener('click', () => dom.exportDialog.close());
   dom.exportCloseBtn.addEventListener('click', () => dom.exportDialog.close());
