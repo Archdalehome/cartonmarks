@@ -707,5 +707,232 @@ await check('模板数据超过 512 KB → 413 too_large', async () => {
 
 /* ── 收尾 ───────────────────────────────────────── */
 
+console.log('模板分享');
+
+const shareEp = await import('../functions/api/templates/[id]/share.js');
+const shareRevokeEp = await import('../functions/api/templates/[id]/share/[shareId].js');
+const sharedListEp = await import('../functions/api/shared/index.js');
+const sharedItemEp = await import('../functions/api/shared/[shareId].js');
+
+/** 建一个模板，返回模板 id */
+async function makeTemplate(env, token, name, data) {
+  const res = await tplListEp.onRequestPost({
+    request: jsonRequest('POST', 'https://x/api/templates', { name, data }, token),
+    env,
+  });
+  assert.equal(res.status, 201);
+  return (await jsonBody(res)).id;
+}
+
+function shareKeyCount(env) {
+  return [...env.CM_KV._map.keys()].filter((k) => k.startsWith('cm:shared') || k.startsWith('cm:shareOut')).length;
+}
+
+async function shareTo(env, token, tplId, email) {
+  return shareEp.onRequestPost({
+    request: jsonRequest('POST', `https://x/api/templates/${tplId}/share`, { email }, token),
+    env,
+    params: { id: tplId },
+  });
+}
+
+await check('分享给未注册邮箱 → 404 user_not_found，且 KV 里没写入任何东西', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender@b.com');
+  const tplId = await makeTemplate(env, sender.token, '方箱', { shape: 'rsc', dims: { L: 600, W: 400, H: 300 } });
+  const before = shareKeyCount(env);
+  const res = await shareTo(env, sender.token, tplId, 'nobody@nowhere.com');
+  assert.equal(res.status, 404);
+  const body404 = await jsonBody(res);
+  assert.equal(body404.error, 'user_not_found');
+  assert.equal(body404.message, '该用户不存在');
+  assert.equal(shareKeyCount(env), before, '不该写入任何 cm:shared / cm:shareOut 键');
+});
+
+await check('分享给自己 → 400 user_is_self', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'self@b.com');
+  const tplId = await makeTemplate(env, sender.token, '自用', { shape: 'rsc' });
+  const res = await shareTo(env, sender.token, tplId, ' SELF@b.com ');
+  assert.equal(res.status, 400);
+  assert.equal((await jsonBody(res)).error, 'user_is_self');
+});
+
+await check('未订阅的发件人不能分享 → 403 not_subscribed', async () => {
+  const env = makeEnv();
+  const sender = await registerUser(env, 'free@b.com');
+  await registerUser(env, 'recv0@b.com');
+  const res = await shareTo(env, sender, 't_x', 'recv0@b.com');
+  assert.equal(res.status, 403);
+  assert.equal((await jsonBody(res)).error, 'not_subscribed');
+});
+
+await check('收到矩形箱模板：未订阅的收件人也能载入', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender2@b.com');
+  const recvToken = await registerUser(env, 'recv2@b.com');
+  const data = { shape: 'rsc', dims: { L: 600, W: 400, H: 300 }, panels: { front: { elements: [] } } };
+  const tplId = await makeTemplate(env, sender.token, '矩形模板', data);
+
+  const res = await shareTo(env, sender.token, tplId, 'recv2@b.com');
+  assert.equal(res.status, 200);
+  const { shareId } = await jsonBody(res);
+  assert.match(shareId, /^sh_/);
+
+  const list = await sharedListEp.onRequestGet({ request: getRequest('https://x/api/shared', recvToken), env });
+  assert.equal(list.status, 200);
+  const listBody = await jsonBody(list);
+  assert.equal(listBody.items.length, 1);
+  assert.equal(listBody.items[0].name, '矩形模板');
+  assert.equal(listBody.items[0].shape, 'rsc');
+  assert.equal(listBody.items[0].fromEmail, 'sender2@b.com');
+
+  const one = await sharedItemEp.onRequestGet({
+    request: getRequest(`https://x/api/shared/${shareId}`, recvToken),
+    env,
+    params: { shareId },
+  });
+  assert.equal(one.status, 200);
+  const body = await jsonBody(one);
+  assert.equal(body.shape, 'rsc');
+  assert.deepEqual(body.data, data);
+});
+
+await check('收到 L 形模板：未订阅的收件人 403 shape_locked（带 shape）', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender3@b.com');
+  const recvToken = await registerUser(env, 'recv3@b.com');
+  const tplId = await makeTemplate(env, sender.token, 'L 形模板', { shape: 'lshape', dims: { L: 600 } });
+
+  const res = await shareTo(env, sender.token, tplId, 'recv3@b.com');
+  const { shareId } = await jsonBody(res);
+
+  const one = await sharedItemEp.onRequestGet({
+    request: getRequest(`https://x/api/shared/${shareId}`, recvToken),
+    env,
+    params: { shareId },
+  });
+  assert.equal(one.status, 403);
+  const body = await jsonBody(one);
+  assert.equal(body.error, 'shape_locked');
+  assert.equal(body.shape, 'lshape');
+});
+
+await check('收件人订阅后，同一个 L 形模板就能载入', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender4@b.com');
+  const recvToken = await registerUser(env, 'recv4@b.com');
+  const tplId = await makeTemplate(env, sender.token, 'L 形模板2', { shape: 'lshape' });
+  const { shareId } = await jsonBody(await shareTo(env, sender.token, tplId, 'recv4@b.com'));
+
+  const me = await meEp.onRequestGet({ request: getRequest('https://x/api/me', recvToken), env });
+  const uid = (await jsonBody(me)).user.id;
+  await env.CM_KV.put(`cm:sub:${uid}`, JSON.stringify({ expiresAt: new Date(clock() + 86_400_000).toISOString() }));
+
+  const one = await sharedItemEp.onRequestGet({
+    request: getRequest(`https://x/api/shared/${shareId}`, recvToken),
+    env,
+    params: { shareId },
+  });
+  assert.equal(one.status, 200);
+  assert.equal((await jsonBody(one)).shape, 'lshape');
+});
+
+await check('快照语义：发件人改了模板，收件人手里那份不变', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender5@b.com');
+  const recvToken = await registerUser(env, 'recv5@b.com');
+  const tplId = await makeTemplate(env, sender.token, '快照', { shape: 'rsc', note: '分享时的版本' });
+  const { shareId } = await jsonBody(await shareTo(env, sender.token, tplId, 'recv5@b.com'));
+
+  // 模拟发件人后来改了模板
+  await env.CM_KV.put(
+    `cm:tpl:${sender.uid}:${tplId}`,
+    JSON.stringify({ id: tplId, name: '快照', data: { shape: 'rsc', note: '改过之后' }, updatedAt: new Date(clock()).toISOString() }),
+  );
+
+  const one = await sharedItemEp.onRequestGet({
+    request: getRequest(`https://x/api/shared/${shareId}`, recvToken),
+    env,
+    params: { shareId },
+  });
+  assert.equal((await jsonBody(one)).data.note, '分享时的版本');
+});
+
+await check('重复分享给同一人：覆盖，不新增一条', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender6@b.com');
+  const recvToken = await registerUser(env, 'recv6@b.com');
+  const tplId = await makeTemplate(env, sender.token, '重复', { shape: 'rsc' });
+  const first = await jsonBody(await shareTo(env, sender.token, tplId, 'recv6@b.com'));
+  const second = await jsonBody(await shareTo(env, sender.token, tplId, 'recv6@b.com'));
+  assert.equal(first.shareId, second.shareId);
+  const list = await sharedListEp.onRequestGet({ request: getRequest('https://x/api/shared', recvToken), env });
+  assert.equal((await jsonBody(list)).items.length, 1);
+});
+
+await check('收件人删除自己那份：自己列表少一条，发件人发出记录还在', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender7@b.com');
+  const recvToken = await registerUser(env, 'recv7@b.com');
+  const tplId = await makeTemplate(env, sender.token, '删除测试', { shape: 'rsc' });
+  const { shareId } = await jsonBody(await shareTo(env, sender.token, tplId, 'recv7@b.com'));
+
+  const del = await sharedItemEp.onRequestDelete({
+    request: new Request(`https://x/api/shared/${shareId}`, { method: 'DELETE', headers: { Cookie: `cm_sess=${recvToken}` } }),
+    env,
+    params: { shareId },
+  });
+  assert.equal(del.status, 204);
+
+  const list = await sharedListEp.onRequestGet({ request: getRequest('https://x/api/shared', recvToken), env });
+  assert.equal((await jsonBody(list)).items.length, 0);
+  assert.ok(await env.CM_KV.get(`cm:shareOut:${sender.uid}:${shareId}`, 'json'), '发件人的发出记录应还在');
+});
+
+await check('发件人撤销：收件人那份消失', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender8@b.com');
+  const recvToken = await registerUser(env, 'recv8@b.com');
+  const tplId = await makeTemplate(env, sender.token, '撤销测试', { shape: 'rsc' });
+  const { shareId } = await jsonBody(await shareTo(env, sender.token, tplId, 'recv8@b.com'));
+
+  const revoke = await shareRevokeEp.onRequestDelete({
+    request: new Request(`https://x/api/templates/${tplId}/share/${shareId}`, {
+      method: 'DELETE',
+      headers: { Cookie: `cm_sess=${sender.token}` },
+    }),
+    env,
+    params: { id: tplId, shareId },
+  });
+  assert.equal(revoke.status, 204);
+
+  const list = await sharedListEp.onRequestGet({ request: getRequest('https://x/api/shared', recvToken), env });
+  assert.equal((await jsonBody(list)).items.length, 0);
+  const one = await sharedItemEp.onRequestGet({
+    request: getRequest(`https://x/api/shared/${shareId}`, recvToken),
+    env,
+    params: { shareId },
+  });
+  assert.equal(one.status, 404);
+});
+
+await check('分享限速：每分钟第 11 次 → 429', async () => {
+  const env = makeEnv();
+  const sender = await subscribedUser(env, 'sender9@b.com');
+  const recvToken = await registerUser(env, 'recv9@b.com');
+  const tplId = await makeTemplate(env, sender.token, '限速', { shape: 'rsc' });
+  for (let i = 0; i < 10; i += 1) {
+    const ok = await shareTo(env, sender.token, tplId, 'recv9@b.com');
+    assert.equal(ok.status, 200, `第 ${i + 1} 次应该成功`);
+  }
+  const blocked = await shareTo(env, sender.token, tplId, 'recv9@b.com');
+  assert.equal(blocked.status, 429);
+  assert.equal((await jsonBody(blocked)).error, 'rate_limited');
+  assert.ok(recvToken);
+});
+
+/* ── 收尾 ───────────────────────────────────────── */
+
 globalThis.fetch = originalFetch;
 console.log(`\n${passed} 项通过${process.exitCode ? '，存在失败' : '，全部通过'}`);

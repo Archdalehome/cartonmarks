@@ -909,3 +909,8 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   transform: translate(-50%, -50%) rotate(0deg);
 }
 .ed-el-inner > * { display: block; }
+
+/* 模板弹层：我的 / 收到的 两个页签 */
+.tpl-tabs { margin-left: auto; margin-right: 8px; height: 28px; }
+.tpl-tabs button { padding: 0 10px; font-size: 12px; height: 24px; }
+.help-head { display: flex; align-items: center; gap: 8px; }

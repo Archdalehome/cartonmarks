@@ -48,6 +48,31 @@ const server = http.createServer((req, res) => {
       });
       res.end(body === null ? '' : JSON.stringify(body));
     };
+    // 分享接口的假实现：给 nobody@nowhere.com 返回用户不存在，其余成功
+    if (/^\/api\/templates\/[^/]+\/share$/.test(urlPath) && req.method === 'POST') {
+      let raw = '';
+      req.on('data', (c) => {
+        raw += c;
+      });
+      req.on('end', () => {
+        let email = '';
+        try {
+          email = String(JSON.parse(raw).email || '').trim().toLowerCase();
+        } catch {
+          email = '';
+        }
+        if (email === 'nobody@nowhere.com') {
+          send(404, { error: 'user_not_found', message: '该用户不存在' });
+          return;
+        }
+        if (email === 'dev@local') {
+          send(400, { error: 'user_is_self', message: '不能分享给自己' });
+          return;
+        }
+        send(200, { shareId: 'sh_mock', toEmail: email });
+      });
+      return;
+    }
     const list = [
       { id: 't_mock_1', name: 'L 形柜体箱（示例）', updatedAt: '2026-10-31T07:20:00.000Z' },
       { id: 't_mock_2', name: '斜形汽配箱', updatedAt: '2026-10-30T12:05:00.000Z' },
@@ -138,6 +163,42 @@ const server = http.createServer((req, res) => {
   if (process.env.CM_MOCK_EXPIRED_SUB === '1' && urlPath.startsWith('/api/templates')) {
     res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ error: 'not_subscribed', message: 'mock: 订阅已过期' }));
+    return;
+  }
+
+  // 本地自测用假「收到的分享」：一条矩形箱模板（可直接载入）+ 一条 L 形模板（未订阅会被 403）
+  if (process.env.CM_MOCK_SUB === '1' && urlPath.startsWith('/api/shared')) {
+    const send = (status, body) => {
+      res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(body === null ? '' : JSON.stringify(body));
+    };
+    if (urlPath === '/api/shared') {
+      send(200, {
+        items: [
+          { shareId: 'sh_rsc', fromEmail: 'chief@b.com', name: '矩形箱模板（分享）', shape: 'rsc', sharedAt: '2026-10-31T08:00:00.000Z' },
+          { shareId: 'sh_lshape', fromEmail: 'chief@b.com', name: 'L 形模板（分享）', shape: 'lshape', sharedAt: '2026-10-31T09:00:00.000Z' },
+        ],
+        total: 2,
+        limit: 100,
+        notice: '',
+      });
+      return;
+    }
+    if (urlPath === '/api/shared/sh_rsc') {
+      send(200, { name: '矩形箱模板（分享）', shape: 'rsc', fromEmail: 'chief@b.com', data: { shape: 'rsc', dims: { L: 600, W: 400, H: 300 }, panels: {} } });
+      return;
+    }
+    if (urlPath === '/api/shared/sh_lshape') {
+      // 订阅过就放行，否则按后端契约返回 403 shape_locked
+      send(403, { error: 'shape_locked', message: '这个模板是L 形箱专属，需要订阅后才能使用', shape: 'lshape' });
+      return;
+    }
+    if (req.method === 'DELETE') {
+      res.writeHead(204, { 'Cache-Control': 'no-store' });
+      res.end();
+      return;
+    }
+    send(404, { error: 'share_not_found', message: 'mock: 分享不存在' });
     return;
   }
 

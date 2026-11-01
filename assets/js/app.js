@@ -251,6 +251,11 @@ async function init() {
     getTemplateData: buildTemplateData,
     toast: showToast,
     onError: handleApiError,
+    // 收到的模板箱型没权限：直接弹订阅层，并说明是哪种箱型被锁
+    onShapeLocked: (shape, message) => {
+      openSubscribe();
+      showToast(message || '这个箱型需要订阅后才能使用', { ms: 4200, tone: 'warn' });
+    },
   });
   initAccountUI({ onChange: onAccountChanged })
     .then((acc) => {

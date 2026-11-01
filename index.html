@@ -435,6 +435,10 @@
   <div class="help-inner">
     <div class="help-head">
       <h2>我的模板</h2>
+      <div class="segmented tpl-tabs" id="tplTabs" role="tablist">
+        <button type="button" data-tab="mine" class="is-active" role="tab" aria-selected="true">我的</button>
+        <button type="button" data-tab="shared" role="tab" aria-selected="false">收到的</button>
+      </div>
       <button type="button" class="btn btn-ghost btn-icon" id="tplCloseBtn" aria-label="关闭">✕</button>
     </div>
     <div class="help-body">
@@ -442,6 +446,25 @@
       <div class="tpl-list" id="tplList"></div>
     </div>
   </div>
+</dialog>
+
+<dialog id="tplShareDialog" class="help-dialog">
+  <form class="help-inner" id="tplShareForm">
+    <div class="help-head">
+      <h2 id="tplShareTitle">分享模板</h2>
+      <button type="button" class="btn btn-ghost btn-icon" id="tplShareCloseBtn" aria-label="关闭">✕</button>
+    </div>
+    <div class="help-body">
+      <label class="label" for="tplShareEmail">对方的注册邮箱</label>
+      <input class="input" id="tplShareEmail" type="email" autocomplete="off" placeholder="someone@example.com" required />
+      <p class="hint">对方必须是注册用户；分享后对方在「收到的」里可以载入。对方没有该箱型的权限时会被提示订阅。</p>
+      <p class="field-error" id="tplShareError" role="alert"></p>
+      <div class="tpl-name-actions">
+        <button type="button" class="btn btn-ghost" id="tplShareCancelBtn">取消</button>
+        <button type="submit" class="btn btn-primary">分享</button>
+      </div>
+    </div>
+  </form>
 </dialog>
 
 <dialog id="tplNameDialog" class="help-dialog">

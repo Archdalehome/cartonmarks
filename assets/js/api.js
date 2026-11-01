@@ -55,4 +55,13 @@ export const api = {
   template: (id) => request(`/api/templates/${encodeURIComponent(id)}`),
   createTemplate: (payload) => request('/api/templates', { method: 'POST', body: payload }),
   deleteTemplate: (id) => request(`/api/templates/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // 模板分享：发出侧
+  shareTemplate: (id, email) =>
+    request(`/api/templates/${encodeURIComponent(id)}/share`, { method: 'POST', body: { email } }),
+  revokeShare: (id, shareId) =>
+    request(`/api/templates/${encodeURIComponent(id)}/share/${encodeURIComponent(shareId)}`, { method: 'DELETE' }),
+  // 模板分享：收到侧
+  sharedTemplates: () => request('/api/shared'),
+  sharedTemplate: (shareId) => request(`/api/shared/${encodeURIComponent(shareId)}`),
+  deleteShared: (shareId) => request(`/api/shared/${encodeURIComponent(shareId)}`, { method: 'DELETE' }),
 };
