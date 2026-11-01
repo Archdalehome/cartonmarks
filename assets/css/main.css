@@ -779,3 +779,43 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
 .input-wrap input { width: 104px; }
 .controls { gap: 12px 14px; }
 .field--actions { align-self: flex-end; margin-left: auto; }
+/* 2026-11-01 二轮排版：整行塞得下、窄屏可折行且不横向溢出 */
+#shapeSelect {
+  width: 7.4em;
+  min-width: 0;
+  max-width: 9em;
+  padding: 0 6px;
+}
+.field--dim { min-width: 0; }
+.input-wrap input { width: 78px; padding: 0 24px 0 8px; }
+.input-wrap .suffix { right: 6px; font-size: 11.5px; }
+.derived-value { width: 78px; padding: 0 24px 0 8px; }
+.controls { gap: 10px 12px; }
+.field--actions { align-self: flex-end; margin-left: auto; }
+@media (min-width: 901px) {
+  .controls { flex-wrap: nowrap; }
+}
+@media (max-width: 900px) {
+  .controls { flex-wrap: wrap; }
+  .field--actions { margin-left: 0; }
+  .field--dim, .input-wrap input, .derived-value { width: 88px; }
+}
+/* 380px 窄屏：控件按两列铺满，彻底消掉横向溢出 */
+@media (max-width: 640px) {
+  .controls { flex-wrap: wrap; row-gap: 10px; }
+  .controls .field { flex: 1 1 100%; min-width: 0; }
+  .controls .field--dim { flex: 1 1 calc(50% - 6px); }
+  .controls .field--dim .input-wrap,
+  .controls .field--dim .input-wrap input,
+  .controls .derived-value { width: 100%; }
+  #shapeSelect { width: 100%; max-width: none; }
+  .field--actions { flex: 1 1 100%; }
+  .editor-tools { flex-wrap: wrap; }
+}
+/* 768 这类中等宽度：顶栏换行，别把品牌名挤成一列字 */
+@media (max-width: 900px) {
+  .topbar { flex-wrap: wrap; row-gap: 8px; }
+  .topbar-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; row-gap: 8px; }
+  .brand { flex: 0 0 auto; }
+  .brand-text h1 { white-space: nowrap; }
+}
