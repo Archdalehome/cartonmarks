@@ -86,6 +86,7 @@ const dom = {
   helpDialog: el('helpDialog'),
   toast: el('toast'),
   templatesBtn: el('templatesBtn'),
+  brandSub: el('brandSub'),
   serviceBanner: el('serviceBanner'),
   mobileHint: el('mobileHint'),
   exportPaper: el('exportPaper'),
@@ -377,8 +378,22 @@ function renderStageTag(acc) {
   if (existing) existing.remove();
 }
 
+/** 顶栏副标题：未登录 / 未订阅时提示可订阅解锁（浅黄底），已订阅恢复原本的说明文字 */
+const BRAND_SUB_PROMO = '无需注册/登录也可以使用，注册并订阅可以解锁更多箱形和功能';
+const BRAND_SUB_DEFAULT = 'Carton Mark · 纸箱展开图箱唛编辑与 PDF 导出';
+
+function renderBrandSub(acc) {
+  const node = dom.brandSub;
+  if (!node) return;
+  const subscribed = Boolean(acc && acc.subscribed);
+  const text = subscribed ? BRAND_SUB_DEFAULT : BRAND_SUB_PROMO;
+  if (node.textContent !== text) node.textContent = text;
+  node.classList.toggle('is-promo', !subscribed);
+}
+
 function onAccountChanged(acc) {
   renderStageTag(acc);
+  renderBrandSub(acc);
   if (dom.serviceBanner) dom.serviceBanner.hidden = !acc.backendDown;
   // 模板按钮的状态与悬停提示（未登录/未订阅/可用三种）
   if (dom.templatesBtn) {

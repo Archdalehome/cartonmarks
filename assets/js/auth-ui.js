@@ -120,7 +120,25 @@ export async function refreshAccount() {
     state.loading = false;
   }
   renderAccount();
+  scheduleExpiryNotify();
   return currentAccount();
+}
+
+/**
+ * 订阅到期的那一刻主动通知一次界面（顶栏提示、模板按钮、箱型锁都要立刻变），
+ * 不用等用户刷新或下一次操作。
+ */
+let expiryTimer = 0;
+
+function scheduleExpiryNotify() {
+  clearTimeout(expiryTimer);
+  if (!state.subExpiresAt) return;
+  const ms = new Date(state.subExpiresAt).getTime() - Date.now();
+  if (!(ms > 0)) return;
+  expiryTimer = setTimeout(() => {
+    renderAccount();
+    notify(currentAccount());
+  }, ms + 1000);
 }
 
 function renderAccount() {

@@ -859,3 +859,28 @@ input:focus-visible, .panel:focus-visible rect { outline: 2px solid var(--accent
   white-space: normal;
   line-height: 1.6;
 }
+
+/* 顶栏副标题：未订阅时提示可以订阅解锁，浅黄底 + 深色字（不刺眼、对比度够） */
+.brand-sub { margin: 0; }
+.brand-sub.is-promo {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fff6c2;
+  color: #7a5b00;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: normal;
+  max-width: 420px;
+}
+@media (max-width: 640px) {
+  /* 窄屏这句也要能看：允许折行、缩小字号，但不撑破顶栏 */
+  .brand-text p.brand-sub.is-promo {
+    display: block;
+    font-size: 10.5px;
+    line-height: 1.45;
+    max-width: 190px;
+    padding: 2px 6px;
+  }
+}
